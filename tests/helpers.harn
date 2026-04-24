@@ -1,0 +1,46 @@
+import {
+  activate,
+  call,
+  init,
+  kinds,
+  normalize_inbound,
+  payload_schema,
+  provider_id,
+  shutdown,
+} from "../src/lib"
+
+pub fn gitlab_headers(token, event, event_uuid = "event-uuid-1") {
+  return {["x-gitlab-event"]: event, ["x-gitlab-event-uuid"]: event_uuid, ["x-gitlab-token"]: token}
+}
+
+pub fn signed_raw(token, body, event, extra = nil) {
+  return extra ?? {}
+    + {signing_secret: token, body_text: body, headers: gitlab_headers(token, event)}
+}
+
+pub fn fixture_body(name) {
+  return read_file(source_dir() + "/fixtures/webhooks/" + name + ".json")
+}
+
+pub fn fixture_raw(name, token, event, extra = nil) {
+  return signed_raw(token, fixture_body(name), event, extra)
+}
+
+pub fn assert_gitlab_interface() {
+  shutdown()
+  assert_eq(provider_id(), "gitlab", "provider id")
+  assert_eq(kinds()[0], "webhook", "webhook kind")
+  assert_eq(payload_schema().name, "GitLabEventPayload", "payload schema name")
+  let initialized = init({signing_secret: "test-secret"})
+  assert(initialized.initialized == true, "init stores state")
+  let activated = activate([{id: "primary", path: "/gitlab/events", secrets: {signing_secret: "test-secret"}}])
+  assert_eq(activated.bindings, 1, "activate counts bindings")
+}
+
+pub fn gitlab_call(method, args) {
+  return call(method, args)
+}
+
+pub fn gitlab_normalize(raw) {
+  return normalize_inbound(raw)
+}

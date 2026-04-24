@@ -1,0 +1,43 @@
+{
+  "object_kind": "merge_request",
+  "event_type": "merge_request",
+  "user": {
+    "id": 4001,
+    "name": "Ada Lovelace",
+    "username": "ada",
+    "email": "ada@example.com",
+    "avatar_url": "https://gitlab.com/uploads/-/system/user/avatar/4001/avatar.png"
+  },
+  "project": {
+    "id": 101,
+    "name": "my-project",
+    "web_url": "https://gitlab.com/my-group/my-project",
+    "path_with_namespace": "my-group/my-project",
+    "default_branch": "main"
+  },
+  "object_attributes": {
+    "id": 9001,
+    "iid": 42,
+    "title": "Wire up harn-gitlab-connector",
+    "description": "Port the connector interface.",
+    "action": "open",
+    "state": "opened",
+    "source_branch": "harn-gitlab-connector",
+    "target_branch": "main",
+    "source_project_id": 101,
+    "target_project_id": 101,
+    "author_id": 4001,
+    "assignee_ids": [],
+    "reviewer_ids": [4002],
+    "url": "https://gitlab.com/my-group/my-project/-/merge_requests/42",
+    "merge_status": "can_be_merged",
+    "detailed_merge_status": "mergeable",
+    "draft": false,
+    "created_at": "2026-04-24T12:00:00Z",
+    "updated_at": "2026-04-24T12:00:00Z"
+  },
+  "changes": {},
+  "labels": [],
+  "assignees": [],
+  "reviewers": [{"id": 4002, "name": "Linus", "username": "linus"}]
+}

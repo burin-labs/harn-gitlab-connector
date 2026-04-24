@@ -1,0 +1,25 @@
+{
+  "object_kind": "pipeline",
+  "user": {"id": 4001, "name": "Ada Lovelace", "username": "ada"},
+  "project": {
+    "id": 101,
+    "name": "my-project",
+    "web_url": "https://gitlab.com/my-group/my-project",
+    "path_with_namespace": "my-group/my-project"
+  },
+  "object_attributes": {
+    "id": 55002,
+    "iid": 13,
+    "name": "Pipeline #13",
+    "ref": "main",
+    "sha": "cccccccccccccccccccccccccccccccccccccccc",
+    "before_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "status": "failed",
+    "detailed_status": "failed",
+    "stages": ["build", "test"],
+    "created_at": "2026-04-24T13:05:00Z",
+    "finished_at": "2026-04-24T13:08:00Z",
+    "duration": 180,
+    "url": "https://gitlab.com/my-group/my-project/-/pipelines/55002"
+  }
+}

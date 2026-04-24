@@ -1,0 +1,43 @@
+{
+  "object_kind": "push",
+  "event_name": "push",
+  "before": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "ref": "refs/heads/main",
+  "ref_protected": true,
+  "checkout_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "user_id": 4001,
+  "user_name": "Ada Lovelace",
+  "user_username": "ada",
+  "user_email": "ada@example.com",
+  "user_avatar": "https://gitlab.com/uploads/-/system/user/avatar/4001/avatar.png",
+  "project_id": 101,
+  "project": {
+    "id": 101,
+    "name": "my-project",
+    "description": "Example project",
+    "web_url": "https://gitlab.com/my-group/my-project",
+    "git_ssh_url": "git@gitlab.com:my-group/my-project.git",
+    "git_http_url": "https://gitlab.com/my-group/my-project.git",
+    "namespace": "my-group",
+    "path_with_namespace": "my-group/my-project",
+    "default_branch": "main"
+  },
+  "commits": [
+    {
+      "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "message": "Add harn connector fixture\n",
+      "title": "Add harn connector fixture",
+      "timestamp": "2026-04-24T12:05:00Z",
+      "url": "https://gitlab.com/my-group/my-project/-/commit/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "author": {"name": "Ada Lovelace", "email": "ada@example.com"}
+    }
+  ],
+  "total_commits_count": 1,
+  "repository": {
+    "name": "my-project",
+    "url": "git@gitlab.com:my-group/my-project.git",
+    "description": "Example project",
+    "homepage": "https://gitlab.com/my-group/my-project"
+  }
+}

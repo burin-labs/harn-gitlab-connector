@@ -1,0 +1,27 @@
+{
+  "object_kind": "merge_request",
+  "event_type": "merge_request",
+  "user": {"id": 4001, "name": "Ada Lovelace", "username": "ada"},
+  "project": {
+    "id": 101,
+    "name": "my-project",
+    "web_url": "https://gitlab.com/my-group/my-project",
+    "path_with_namespace": "my-group/my-project"
+  },
+  "object_attributes": {
+    "id": 9001,
+    "iid": 42,
+    "title": "Wire up harn-gitlab-connector",
+    "action": "merge",
+    "state": "merged",
+    "source_branch": "harn-gitlab-connector",
+    "target_branch": "main",
+    "url": "https://gitlab.com/my-group/my-project/-/merge_requests/42",
+    "merge_status": "can_be_merged",
+    "detailed_merge_status": "merged",
+    "draft": false,
+    "created_at": "2026-04-24T12:00:00Z",
+    "updated_at": "2026-04-24T13:00:00Z",
+    "merged_at": "2026-04-24T13:00:00Z"
+  }
+}

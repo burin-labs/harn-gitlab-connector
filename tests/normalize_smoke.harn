@@ -1,0 +1,77 @@
+import { shutdown } from "../src/lib"
+import {
+  assert_gitlab_interface,
+  fixture_body,
+  fixture_raw,
+  gitlab_headers,
+  gitlab_normalize,
+} from "./helpers"
+
+@complexity(allow)
+pipeline default() {
+  let token = "test-signing-token"
+  assert_gitlab_interface()
+  let mr = gitlab_normalize(fixture_raw("merge_request_opened", token, "Merge Request Hook"))
+  assert_eq(mr.type, "event", "mr envelope type")
+  assert_eq(mr.event.kind, "merge_request.open", "mr kind")
+  assert_eq(mr.event.signature_status, "signed", "mr signed")
+  assert_eq(mr.event.payload.project.id, 101, "mr project id")
+  assert_eq(mr.event.payload.resource.iid, 42, "mr iid")
+  assert_eq(mr.event.payload.actor.username, "ada", "mr actor")
+  assert(mr.event.dedupe_key != "" && mr.event.dedupe_key != nil, "mr dedupe key populated")
+  let push = gitlab_normalize(fixture_raw("push", token, "Push Hook"))
+  assert_eq(push.event.kind, "push", "push kind")
+  assert_eq(
+    push.event.payload.resource.after,
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "push after",
+  )
+  let tag = gitlab_normalize(fixture_raw("tag_push", token, "Tag Push Hook"))
+  assert_eq(tag.event.kind, "tag_push", "tag push kind")
+  let note_mr = gitlab_normalize(fixture_raw("note_mr", token, "Note Hook"))
+  assert_eq(note_mr.event.kind, "note.create", "note on MR kind")
+  assert_eq(note_mr.event.payload.resource.noteable_type, "MergeRequest", "note noteable type")
+  let note_issue = gitlab_normalize(fixture_raw("note_issue", token, "Note Hook"))
+  assert_eq(note_issue.event.payload.resource.noteable_type, "Issue", "note on issue noteable type")
+  let issue = gitlab_normalize(fixture_raw("issue_opened", token, "Issue Hook"))
+  assert_eq(issue.event.kind, "issue.open", "issue kind")
+  let pipeline_ok = gitlab_normalize(fixture_raw("pipeline_success", token, "Pipeline Hook"))
+  assert_eq(pipeline_ok.event.kind, "pipeline.success", "pipeline success kind")
+  let pipeline_bad = gitlab_normalize(fixture_raw("pipeline_failed", token, "Pipeline Hook"))
+  assert_eq(pipeline_bad.event.kind, "pipeline.failed", "pipeline failed kind")
+  let body = fixture_body("merge_request_opened")
+  let wrong_token = gitlab_normalize(
+    {
+    signing_secret: token,
+    body_text: body,
+    headers: gitlab_headers("wrong-token", "Merge Request Hook"),
+  },
+  )
+  assert_eq(wrong_token.type, "reject", "wrong token rejects")
+  assert_eq(wrong_token.reject.status, 401, "wrong token 401")
+  let missing_token = gitlab_normalize(
+    {signing_secret: token, body_text: body, headers: {["x-gitlab-event"]: "Merge Request Hook"}},
+  )
+  assert_eq(missing_token.type, "reject", "missing token rejects")
+  assert_eq(missing_token.reject.status, 401, "missing token 401")
+  shutdown()
+  let unsigned = gitlab_normalize({body_text: body, headers: {["x-gitlab-event"]: "Merge Request Hook"}})
+  assert_eq(unsigned.type, "event", "unsigned accepted when no secret configured")
+  assert_eq(unsigned.event.signature_status, "unsigned", "unsigned signature_status")
+  let invalid_json = gitlab_normalize(
+    {signing_secret: token, body_text: "{not json", headers: gitlab_headers(token, "Push Hook")},
+  )
+  assert_eq(invalid_json.type, "reject", "invalid json rejects")
+  assert_eq(invalid_json.reject.status, 400, "invalid json 400")
+  let body_str = fixture_body("merge_request_opened")
+  let unsupported_body = replace(body_str, "\"merge_request\"", "\"workflow_run\"")
+  let unsupported = gitlab_normalize(
+    {
+    signing_secret: token,
+    body_text: unsupported_body,
+    headers: gitlab_headers(token, "Workflow Run Hook"),
+  },
+  )
+  assert_eq(unsupported.type, "reject", "unsupported event rejects")
+  shutdown()
+}

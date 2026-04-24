@@ -1,0 +1,26 @@
+{
+  "object_kind": "tag_push",
+  "event_name": "tag_push",
+  "before": "0000000000000000000000000000000000000000",
+  "after": "cccccccccccccccccccccccccccccccccccccccc",
+  "ref": "refs/tags/v1.2.0",
+  "checkout_sha": "cccccccccccccccccccccccccccccccccccccccc",
+  "user_id": 4001,
+  "user_name": "Ada Lovelace",
+  "user_username": "ada",
+  "user_email": "ada@example.com",
+  "project_id": 101,
+  "project": {
+    "id": 101,
+    "name": "my-project",
+    "web_url": "https://gitlab.com/my-group/my-project",
+    "path_with_namespace": "my-group/my-project",
+    "default_branch": "main"
+  },
+  "commits": [],
+  "total_commits_count": 0,
+  "repository": {
+    "name": "my-project",
+    "url": "git@gitlab.com:my-group/my-project.git"
+  }
+}

@@ -1,0 +1,29 @@
+import { shutdown } from "../src/lib"
+import { fixture_raw, gitlab_normalize } from "./helpers"
+
+pipeline default() {
+  let token = "test-signing-token"
+  let cases = [
+    ["push", "Push Hook", "push"],
+    ["tag_push", "Tag Push Hook", "tag_push"],
+    ["merge_request_opened", "Merge Request Hook", "merge_request.open"],
+    ["merge_request_merged", "Merge Request Hook", "merge_request.merge"],
+    ["note_mr", "Note Hook", "note.create"],
+    ["note_issue", "Note Hook", "note.create"],
+    ["issue_opened", "Issue Hook", "issue.open"],
+    ["pipeline_success", "Pipeline Hook", "pipeline.success"],
+    ["pipeline_failed", "Pipeline Hook", "pipeline.failed"],
+  ]
+  for [name, header, kind] in cases {
+    let normalized = gitlab_normalize(fixture_raw(name, token, header))
+    assert_eq(normalized.type, "event", name + " envelope type")
+    assert_eq(normalized.event.kind, kind, name + " kind")
+    assert_eq(normalized.event.payload.project.id, 101, name + " project id")
+    assert(normalized.event.payload.raw != nil, name + " includes raw payload")
+    assert(
+      normalized.event.dedupe_key != "" && normalized.event.dedupe_key != nil,
+      name + " dedupe key",
+    )
+  }
+  shutdown()
+}

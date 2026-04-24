@@ -1,0 +1,839 @@
+let GITLAB_PROVIDER_ID = "gitlab"
+
+let GITLAB_STATE_KEY = "harn-gitlab-connector.state"
+
+let GITLAB_API_BASE_URL = "https://gitlab.com/api/v4"
+
+let GITLAB_GRAPHQL_PATH = "/api/graphql"
+
+let GITLAB_OAUTH_AUTHORIZE_PATH = "/oauth/authorize"
+
+let GITLAB_OAUTH_TOKEN_PATH = "/oauth/token"
+
+let GITLAB_SUPPORTED_EVENTS = ["push", "tag_push", "merge_request", "note", "issue", "pipeline"]
+
+let GITLAB_OUTBOUND_METHODS = [
+  "notes.create_merge_request_note",
+  "notes.create_issue_note",
+  "merge_requests.update",
+  "merge_requests.list_changes",
+  "merge_requests.approve",
+  "commit_status.set",
+  "repository_files.get",
+  "graphql",
+  "oauth.authorize_url",
+  "oauth.exchange_code",
+  "oauth.refresh_token",
+]
+
+/** Return this connector's Harn provider id. */
+pub fn provider_id() {
+  return GITLAB_PROVIDER_ID
+}
+
+/** Return the trigger kinds supported by this connector. */
+pub fn kinds() {
+  return ["webhook"]
+}
+
+/** Return the canonical normalized GitLab event payload schema. */
+pub fn payload_schema() {
+  return {
+    name: "GitLabEventPayload",
+    type: "object",
+    required: ["kind", "dedupe_key", "payload", "signature_status"],
+    properties: {
+    kind: {type: "string"},
+    occurred_at: {type: ["string", "null"]},
+    dedupe_key: {type: "string"},
+    signature_status: {type: "string", enum: ["signed", "unsigned", "unknown"]},
+    tenant_id: {type: ["string", "null"]},
+    headers: {type: ["object", "null"]},
+    payload: {
+    type: "object",
+    required: ["object_kind", "project", "actor"],
+    properties: {
+    object_kind: {type: "string"},
+    event_name: {type: ["string", "null"]},
+    action: {type: ["string", "null"]},
+    project: {
+    type: "object",
+    required: ["id"],
+    properties: {
+    id: {type: ["int", "string"]},
+    name: {type: ["string", "null"]},
+    path_with_namespace: {type: ["string", "null"]},
+    web_url: {type: ["string", "null"]},
+  },
+  },
+    actor: {
+    type: "object",
+    required: ["id"],
+    properties: {
+    id: {type: ["int", "string", "null"]},
+    username: {type: ["string", "null"]},
+    name: {type: ["string", "null"]},
+    email: {type: ["string", "null"]},
+  },
+  },
+    resource: {type: ["object", "null"]},
+    raw: {type: "object"},
+  },
+  },
+  },
+  }
+}
+
+/** Initialize connector state with orchestrator context. */
+pub fn init(ctx = nil) {
+  let next = __state() + {initialized: true, ctx: ctx ?? {}}
+  __set_state(next)
+  return next
+}
+
+/** Activate webhook bindings and reject duplicate configured paths. */
+pub fn activate(bindings = []) {
+  var by_id = {}
+  var seen_paths = {}
+  for binding in bindings ?? [] {
+    let binding_id = binding?.binding_id ?? binding?.id ?? "binding-" + to_string(len(by_id.keys()))
+    let path = binding?.path ?? binding?.match?.path
+    if path != nil && path != "" {
+      if seen_paths.get(path) {
+        return __err("activation", "gitlab connector path `" + path + "` is configured by multiple bindings")
+      }
+      seen_paths[path] = true
+    }
+    by_id[binding_id] = binding + {binding_id: binding_id}
+  }
+  let next = __state() + {bindings: by_id, active: true}
+  __set_state(next)
+  return {provider: GITLAB_PROVIDER_ID, kind: "webhook", bindings: len(by_id.keys())}
+}
+
+/** Clear connector lifecycle state. */
+pub fn shutdown() {
+  store_delete(GITLAB_STATE_KEY)
+  return {provider: GITLAB_PROVIDER_ID, active: false}
+}
+
+@complexity(allow)
+/**
+ * Verify and normalize a raw GitLab webhook request.
+ *
+ * GitLab ships a plain shared secret in `X-Gitlab-Token` — not an
+ * HMAC of the body. Verification is a constant-time string compare.
+ * When no secret is configured, events are accepted and emitted with
+ * `signature_status: "unsigned"` per GitLab's upstream model.
+ */
+pub fn normalize_inbound(raw) {
+  let body_text = raw?.body_text ?? raw?.body ?? ""
+  let headers = raw?.headers ?? {}
+  let parsed = try {
+    json_parse(body_text)
+  }
+  if is_err(parsed) {
+    return __reject(400, "invalid_json", "gitlab payload body is not valid JSON")
+  }
+  let payload = unwrap(parsed)
+  let verified = __verify_gitlab_token(raw, headers)
+  if is_err(verified) {
+    return __reject_err(unwrap_err(verified))
+  }
+  let signature_status = unwrap(verified)
+  let object_kind = payload?.object_kind ?? __event_kind_from_header(headers)
+  if object_kind == nil || object_kind == "" {
+    return __reject(400, "missing_event", "missing GitLab object_kind and X-Gitlab-Event header")
+  }
+  if !contains(GITLAB_SUPPORTED_EVENTS, object_kind) {
+    return __reject(400, "unsupported_event", "unsupported GitLab event type `" + to_string(object_kind) + "`")
+  }
+  let event = __build_event(object_kind, payload, raw, headers, signature_status)
+  return {type: "event", event: event}
+}
+
+@complexity(allow)
+/** Dispatch a supported GitLab REST / GraphQL / OAuth2 method. */
+pub fn call(method, args = {}) {
+  if !contains(GITLAB_OUTBOUND_METHODS, method) {
+    return __err("method_not_found", "gitlab connector does not implement outbound method `" + method + "`")
+  }
+  if method == "oauth.authorize_url" {
+    return __oauth_authorize_url(args ?? {})
+  }
+  if method == "oauth.exchange_code" {
+    return __oauth_exchange_code(args ?? {})
+  }
+  if method == "oauth.refresh_token" {
+    return __oauth_refresh_token(args ?? {})
+  }
+  let config = __outbound_config(args ?? {})
+  if is_err(config) {
+    return config
+  }
+  let cfg = unwrap(config)
+  if method == "notes.create_merge_request_note" {
+    return __gitlab_json(
+      "POST",
+      __gitlab_api_url(
+      cfg.api_base_url,
+      "/projects/" + __project_ref(args) + "/merge_requests/" + to_string(args.merge_request_iid)
+      + "/notes",
+    ),
+      {body: args.body},
+      cfg,
+    )
+  }
+  if method == "notes.create_issue_note" {
+    return __gitlab_json(
+      "POST",
+      __gitlab_api_url(
+      cfg.api_base_url,
+      "/projects/" + __project_ref(args) + "/issues/" + to_string(args.issue_iid) + "/notes",
+    ),
+      {body: args.body},
+      cfg,
+    )
+  }
+  if method == "merge_requests.update" {
+    return __gitlab_json(
+      "PUT",
+      __gitlab_api_url(
+      cfg.api_base_url,
+      "/projects/" + __project_ref(args) + "/merge_requests/" + to_string(args.merge_request_iid),
+    ),
+      __body_without(args, __config_keys() + ["project_id", "project_path", "merge_request_iid"]),
+      cfg,
+    )
+  }
+  if method == "merge_requests.list_changes" {
+    return __gitlab_json(
+      "GET",
+      __gitlab_api_url(
+      cfg.api_base_url,
+      "/projects/" + __project_ref(args) + "/merge_requests/" + to_string(args.merge_request_iid)
+      + "/changes"
+      + __pagination_query(args),
+    ),
+      nil,
+      cfg,
+    )
+  }
+  if method == "merge_requests.approve" {
+    return __gitlab_json(
+      "POST",
+      __gitlab_api_url(
+      cfg.api_base_url,
+      "/projects/" + __project_ref(args) + "/merge_requests/" + to_string(args.merge_request_iid)
+      + "/approve",
+    ),
+      __body_without(args, __config_keys() + ["project_id", "project_path", "merge_request_iid"]),
+      cfg,
+    )
+  }
+  if method == "commit_status.set" {
+    return __gitlab_json(
+      "POST",
+      __gitlab_api_url(
+      cfg.api_base_url,
+      "/projects/" + __project_ref(args) + "/statuses/" + to_string(args.sha),
+    ),
+      __body_without(args, __config_keys() + ["project_id", "project_path", "sha"]),
+      cfg,
+    )
+  }
+  if method == "repository_files.get" {
+    return __gitlab_json(
+      "GET",
+      __gitlab_api_url(
+      cfg.api_base_url,
+      "/projects/" + __project_ref(args) + "/repository/files/"
+      + url_encode(to_string(args.path ?? ""))
+      + __ref_query(args),
+    ),
+      nil,
+      cfg,
+    )
+  }
+  return __gitlab_json(
+    "POST",
+    __graphql_url(cfg.api_base_url),
+    {query: args.query, variables: args.variables ?? {}},
+    cfg,
+  )
+}
+
+fn __state() {
+  return store_get(GITLAB_STATE_KEY) ?? {initialized: false, active: false, bindings: {}, ctx: {}}
+}
+
+fn __set_state(state) {
+  store_set(GITLAB_STATE_KEY, state)
+  return state
+}
+
+fn __err(code, message) {
+  return Err({code: code, message: message})
+}
+
+fn __reject(status, code, message) {
+  return {
+    type: "reject",
+    reject: {
+    status: status,
+    body: json_stringify({error: code, message: message}),
+    content_type: "application/json",
+  },
+  }
+}
+
+fn __reject_err(err) {
+  let code = err?.code ?? "rejected"
+  let message = err?.message ?? "request rejected"
+  let status = if code == "invalid_token" || code == "missing_token" {
+    401
+  } else {
+    400
+  }
+  return __reject(status, code, message)
+}
+
+fn __header(headers, name) {
+  let wanted = lowercase(name)
+  for entry in (headers ?? {}).entries() {
+    if lowercase(trim(to_string(entry.key))) == wanted {
+      return trim(to_string(entry.value))
+    }
+  }
+  return nil
+}
+
+fn __event_kind_from_header(headers) {
+  let raw_header = __header(headers, "x-gitlab-event")
+  if raw_header == nil || raw_header == "" {
+    return nil
+  }
+  let without_hook = if ends_with(raw_header, " Hook") {
+    raw_header[0:len(raw_header) - 5]
+  } else {
+    raw_header
+  }
+  return lowercase(replace(without_hook, " ", "_"))
+}
+
+fn __signing_secret(raw) {
+  let direct = raw?.signing_secret ?? raw?.secret ?? raw?.webhook_secret ?? raw?.config?.signing_secret
+    ?? raw?.secrets?.signing_secret
+  if direct != nil && trim(to_string(direct)) != "" {
+    return to_string(direct)
+  }
+  let state = __state()
+  let ctx_secret = state?.ctx?.signing_secret ?? state?.ctx?.secrets?.signing_secret
+  if ctx_secret != nil && trim(to_string(ctx_secret)) != "" {
+    return to_string(ctx_secret)
+  }
+  let bindings = state?.bindings ?? {}
+  let binding_id = raw?.metadata?.binding_id ?? raw?.binding_id
+  if binding_id != nil {
+    let binding = bindings.get(binding_id)
+    return binding?.signing_secret ?? binding?.secrets?.signing_secret ?? binding?.config?.signing_secret
+  }
+  let values = bindings.values()
+  if len(values) == 1 {
+    let binding = values[0]
+    return binding?.signing_secret ?? binding?.secrets?.signing_secret ?? binding?.config?.signing_secret
+  }
+  return nil
+}
+
+fn __verify_gitlab_token(raw, headers) {
+  let secret = __signing_secret(raw)
+  let provided = __header(headers, "x-gitlab-token")
+  if secret == nil || trim(to_string(secret)) == "" {
+    return Ok("unsigned")
+  }
+  if provided == nil || provided == "" {
+    return __err("missing_token", "x-gitlab-token header missing but a signing_secret is configured")
+  }
+  if !constant_time_eq(to_string(secret), to_string(provided)) {
+    return __err("invalid_token", "x-gitlab-token did not match the configured signing_secret")
+  }
+  return Ok("signed")
+}
+
+@complexity(allow)
+fn __build_event(object_kind, payload, raw, headers, signature_status) {
+  let project = __project(payload)
+  let actor = __actor(payload)
+  let action = __action(object_kind, payload)
+  let kind = if action == nil || action == "" {
+    object_kind
+  } else {
+    object_kind + "." + action
+  }
+  let resource = __resource(object_kind, payload)
+  let dedupe_key = __dedupe_key(object_kind, payload, project, raw, headers)
+  let occurred_at = __occurred_at(object_kind, payload, raw)
+  let normalized_payload = {
+    object_kind: object_kind,
+    event_name: payload?.event_name,
+    action: action,
+    project: project,
+    actor: actor,
+    resource: resource,
+    raw: payload,
+  }
+  return {
+    kind: kind,
+    occurred_at: occurred_at,
+    dedupe_key: dedupe_key,
+    signature_status: signature_status,
+    payload: normalized_payload,
+    headers: {
+    ["x-gitlab-event"]: __header(headers, "x-gitlab-event"),
+    ["x-gitlab-event-uuid"]: __header(headers, "x-gitlab-event-uuid"),
+    ["x-gitlab-instance"]: __header(headers, "x-gitlab-instance"),
+    ["x-gitlab-webhook-uuid"]: __header(headers, "x-gitlab-webhook-uuid"),
+  },
+  }
+}
+
+fn __project(payload) {
+  let project = payload?.project ?? {}
+  return {
+    id: project?.id ?? payload?.project_id,
+    name: project?.name,
+    path_with_namespace: project?.path_with_namespace,
+    web_url: project?.web_url,
+    default_branch: project?.default_branch,
+  }
+}
+
+fn __actor(payload) {
+  let user = payload?.user
+  if user != nil {
+    return {
+      id: user?.id,
+      username: user?.username,
+      name: user?.name,
+      email: user?.email,
+      avatar_url: user?.avatar_url,
+    }
+  }
+  return {
+    id: payload?.user_id,
+    username: payload?.user_username,
+    name: payload?.user_name,
+    email: payload?.user_email,
+    avatar_url: payload?.user_avatar,
+  }
+}
+
+fn __action(object_kind, payload) {
+  if object_kind == "merge_request" || object_kind == "issue" {
+    return payload?.object_attributes?.action
+  }
+  if object_kind == "note" {
+    return payload?.object_attributes?.action ?? "create"
+  }
+  if object_kind == "pipeline" {
+    return payload?.object_attributes?.status
+  }
+  return nil
+}
+
+@complexity(allow)
+fn __resource(object_kind, payload) {
+  if object_kind == "push" || object_kind == "tag_push" {
+    return {
+      ref: payload?.ref,
+      before: payload?.before,
+      after: payload?.after,
+      checkout_sha: payload?.checkout_sha,
+      total_commits_count: payload?.total_commits_count,
+    }
+  }
+  if object_kind == "merge_request" {
+    let attrs = payload?.object_attributes ?? {}
+    return {
+      id: attrs?.id,
+      iid: attrs?.iid,
+      title: attrs?.title,
+      state: attrs?.state,
+      source_branch: attrs?.source_branch,
+      target_branch: attrs?.target_branch,
+      merge_status: attrs?.merge_status,
+      draft: attrs?.draft ?? attrs?.work_in_progress,
+      url: attrs?.url,
+    }
+  }
+  if object_kind == "issue" {
+    let attrs = payload?.object_attributes ?? {}
+    return {id: attrs?.id, iid: attrs?.iid, title: attrs?.title, state: attrs?.state, url: attrs?.url}
+  }
+  if object_kind == "note" {
+    let attrs = payload?.object_attributes ?? {}
+    return {
+      id: attrs?.id,
+      noteable_type: attrs?.noteable_type,
+      noteable_id: attrs?.noteable_id ?? attrs?.noteable_iid,
+      url: attrs?.url,
+    }
+  }
+  let attrs = payload?.object_attributes ?? {}
+  return {
+    id: attrs?.id,
+    iid: attrs?.iid,
+    ref: attrs?.ref,
+    sha: attrs?.sha,
+    status: attrs?.status,
+    detailed_status: attrs?.detailed_status,
+    url: attrs?.url,
+  }
+}
+
+@complexity(allow)
+fn __dedupe_key(object_kind, payload, project, raw, headers) {
+  let uuid = __header(headers, "x-gitlab-event-uuid")
+  if uuid != nil && uuid != "" {
+    return "gitlab:" + object_kind + ":" + uuid
+  }
+  let project_id = to_string(project?.id ?? "unknown")
+  if object_kind == "push" || object_kind == "tag_push" {
+    return "gitlab:" + object_kind + ":" + project_id + ":" + to_string(payload?.ref ?? "")
+      + ":"
+      + to_string(payload?.after ?? "")
+  }
+  if object_kind == "merge_request" {
+    let attrs = payload?.object_attributes ?? {}
+    return "gitlab:merge_request:" + project_id + ":" + to_string(attrs?.iid ?? "")
+      + ":"
+      + to_string(attrs?.action ?? "update")
+      + ":"
+      + to_string(attrs?.updated_at ?? "")
+  }
+  if object_kind == "issue" {
+    let attrs = payload?.object_attributes ?? {}
+    return "gitlab:issue:" + project_id + ":" + to_string(attrs?.iid ?? "")
+      + ":"
+      + to_string(attrs?.updated_at ?? "")
+  }
+  if object_kind == "note" {
+    let attrs = payload?.object_attributes ?? {}
+    return "gitlab:note:" + project_id + ":" + to_string(attrs?.id ?? "")
+  }
+  let attrs = payload?.object_attributes ?? {}
+  return "gitlab:pipeline:" + project_id + ":" + to_string(attrs?.id ?? "")
+    + ":"
+    + to_string(attrs?.status ?? "")
+}
+
+fn __occurred_at(object_kind, payload, raw) {
+  if raw?.occurred_at != nil {
+    return raw.occurred_at
+  }
+  if object_kind == "push" || object_kind == "tag_push" {
+    let commits = payload?.commits ?? []
+    if len(commits) > 0 {
+      return commits[0]?.timestamp
+    }
+    return nil
+  }
+  let attrs = payload?.object_attributes
+  if attrs != nil {
+    return attrs?.updated_at ?? attrs?.created_at ?? attrs?.finished_at
+  }
+  return nil
+}
+
+@complexity(allow)
+fn __outbound_config(args) {
+  let api_base_url = args?.api_base_url ?? env_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
+  let access_token = args?.access_token ?? args?.personal_access_token ?? args?.project_access_token ?? args?.token
+    ?? args?.bindings?.access_token
+    ?? args?.secrets?.access_token
+    ?? env("GITLAB_ACCESS_TOKEN")
+    ?? env("GITLAB_TOKEN")
+  if access_token == nil || trim(to_string(access_token)) == "" {
+    return __err(
+      "missing_token",
+      "gitlab connector requires access_token, personal_access_token, or project_access_token",
+    )
+  }
+  return Ok({api_base_url: to_string(api_base_url), access_token: to_string(access_token)})
+}
+
+fn __config_keys() {
+  return [
+    "api_base_url",
+    "access_token",
+    "personal_access_token",
+    "project_access_token",
+    "token",
+    "bindings",
+    "secrets",
+  ]
+}
+
+fn __body_without(args, keys) {
+  let body = args ?? {} + {}
+  for key in keys {
+    body.remove(key)
+  }
+  return body
+}
+
+fn __gitlab_api_url(api_base_url, path) {
+  let base = trim(to_string(api_base_url))
+  let prefix = if ends_with(base, "/") {
+    base[0:len(base) - 1]
+  } else {
+    base
+  }
+  if starts_with(path, "/") {
+    return prefix + path
+  }
+  return prefix + "/" + path
+}
+
+fn __graphql_url(api_base_url) {
+  let base = trim(to_string(api_base_url))
+  let trimmed = if ends_with(base, "/") {
+    base[0:len(base) - 1]
+  } else {
+    base
+  }
+  let host_only = if ends_with(trimmed, "/api/v4") {
+    trimmed[0:len(trimmed) - 7]
+  } else {
+    trimmed
+  }
+  return host_only + GITLAB_GRAPHQL_PATH
+}
+
+fn __oauth_host(api_base_url) {
+  let base = trim(to_string(api_base_url))
+  let trimmed = if ends_with(base, "/") {
+    base[0:len(base) - 1]
+  } else {
+    base
+  }
+  if ends_with(trimmed, "/api/v4") {
+    return trimmed[0:len(trimmed) - 7]
+  }
+  return trimmed
+}
+
+fn __project_ref(args) {
+  if args?.project_id != nil {
+    return url_encode(to_string(args.project_id))
+  }
+  return url_encode(to_string(args?.project_path ?? ""))
+}
+
+fn __pagination_query(args) {
+  var parts = []
+  if args?.per_page != nil {
+    parts = parts + ["per_page=" + url_encode(to_string(args.per_page))]
+  }
+  if args?.page != nil {
+    parts = parts + ["page=" + url_encode(to_string(args.page))]
+  }
+  if len(parts) == 0 {
+    return ""
+  }
+  return "?" + join(parts, "&")
+}
+
+fn __ref_query(args) {
+  if args?.ref == nil || trim(to_string(args.ref)) == "" {
+    return ""
+  }
+  return "?ref=" + url_encode(to_string(args.ref))
+}
+
+@complexity(allow)
+fn __gitlab_json(method, url, body, cfg) {
+  var options = {
+    headers: {Accept: "application/json", Authorization: "Bearer " + cfg.access_token},
+    retry: {max: 0, backoff_ms: 0},
+  }
+  if body != nil {
+    options["body"] = json_stringify(body)
+    options.headers["Content-Type"] = "application/json"
+  }
+  var retried_rate_limit = false
+  while true {
+    let response_result = try {
+      http_request(method, url, options)
+    }
+    if is_err(response_result) {
+      return __err("transport", to_string(unwrap_err(response_result)))
+    }
+    let response = unwrap(response_result)
+    let limited = __maybe_wait_for_rate_limit(response)
+    if is_err(limited) {
+      return limited
+    }
+    if (response.status == 429 || response.status == 503) && unwrap(limited) && !retried_rate_limit {
+      retried_rate_limit = true
+      continue
+    }
+    if response.status < 200 || response.status >= 300 {
+      let code = if response.status == 429 || response.status == 503 {
+        "rate_limited"
+      } else {
+        if response.status == 401 || response.status == 403 {
+          "unauthorized"
+        } else {
+          "transport"
+        }
+      }
+      return __err(
+        code,
+        "gitlab API request failed with status " + to_string(response.status) + ": " + response.body,
+      )
+    }
+    if trim(response.body ?? "") == "" {
+      return {status: response.status, headers: response.headers, body: ""}
+    }
+    let parsed = try {
+      json_parse(response.body)
+    }
+    if is_err(parsed) {
+      return __err("invalid_response", "GitLab API returned invalid JSON")
+    }
+    return unwrap(parsed)
+  }
+}
+
+fn __maybe_wait_for_rate_limit(response) {
+  let remaining = __header(response.headers ?? {}, "ratelimit-remaining")
+  if remaining == nil || trim(to_string(remaining)) != "0" {
+    return Ok(false)
+  }
+  let reset = __header(response.headers ?? {}, "ratelimit-reset")
+  if reset == nil || trim(to_string(reset)) == "" {
+    return Ok(true)
+  }
+  let parsed_reset = try {
+    to_int(reset)
+  }
+  if is_err(parsed_reset) {
+    return Ok(true)
+  }
+  let wait_seconds = unwrap(parsed_reset) - to_int(timestamp())
+  if wait_seconds > 60 {
+    return __err("rate_limited", "gitlab API rate limit reset is more than 60 seconds away")
+  }
+  if wait_seconds > 0 {
+    sleep(wait_seconds * 1000)
+  }
+  return Ok(true)
+}
+
+@complexity(allow)
+fn __oauth_authorize_url(args) {
+  let api_base_url = args?.api_base_url ?? env_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
+  let host = __oauth_host(api_base_url)
+  if args?.client_id == nil || trim(to_string(args.client_id)) == "" {
+    return __err("missing_client_id", "oauth.authorize_url requires client_id")
+  }
+  if args?.redirect_uri == nil || trim(to_string(args.redirect_uri)) == "" {
+    return __err("missing_redirect_uri", "oauth.authorize_url requires redirect_uri")
+  }
+  var parts = [
+    "client_id=" + url_encode(to_string(args.client_id)),
+    "redirect_uri=" + url_encode(to_string(args.redirect_uri)),
+    "response_type=code",
+    "scope=" + url_encode(to_string(args?.scope ?? "api")),
+  ]
+  if args?.state != nil && trim(to_string(args.state)) != "" {
+    parts = parts + ["state=" + url_encode(to_string(args.state))]
+  }
+  if args?.code_challenge != nil && trim(to_string(args.code_challenge)) != "" {
+    parts = parts
+      + [
+      "code_challenge=" + url_encode(to_string(args.code_challenge)),
+      "code_challenge_method=" + url_encode(to_string(args?.code_challenge_method ?? "S256")),
+    ]
+  }
+  return {authorize_url: host + GITLAB_OAUTH_AUTHORIZE_PATH + "?" + join(parts, "&")}
+}
+
+@complexity(allow)
+fn __oauth_exchange_code(args) {
+  if args?.client_id == nil || trim(to_string(args.client_id)) == "" {
+    return __err("missing_client_id", "oauth.exchange_code requires client_id")
+  }
+  if args?.code == nil || trim(to_string(args.code)) == "" {
+    return __err("missing_code", "oauth.exchange_code requires code")
+  }
+  if args?.redirect_uri == nil || trim(to_string(args.redirect_uri)) == "" {
+    return __err("missing_redirect_uri", "oauth.exchange_code requires redirect_uri")
+  }
+  var body = {
+    client_id: to_string(args.client_id),
+    code: to_string(args.code),
+    grant_type: "authorization_code",
+    redirect_uri: to_string(args.redirect_uri),
+  }
+  if args?.client_secret != nil && trim(to_string(args.client_secret)) != "" {
+    body["client_secret"] = to_string(args.client_secret)
+  }
+  if args?.code_verifier != nil && trim(to_string(args.code_verifier)) != "" {
+    body["code_verifier"] = to_string(args.code_verifier)
+  }
+  return __oauth_token_request(args, body)
+}
+
+fn __oauth_refresh_token(args) {
+  if args?.client_id == nil || trim(to_string(args.client_id)) == "" {
+    return __err("missing_client_id", "oauth.refresh_token requires client_id")
+  }
+  if args?.refresh_token == nil || trim(to_string(args.refresh_token)) == "" {
+    return __err("missing_refresh_token", "oauth.refresh_token requires refresh_token")
+  }
+  var body = {
+    client_id: to_string(args.client_id),
+    refresh_token: to_string(args.refresh_token),
+    grant_type: "refresh_token",
+  }
+  if args?.client_secret != nil && trim(to_string(args.client_secret)) != "" {
+    body["client_secret"] = to_string(args.client_secret)
+  }
+  return __oauth_token_request(args, body)
+}
+
+fn __oauth_token_request(args, body) {
+  let api_base_url = args?.api_base_url ?? env_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
+  let host = __oauth_host(api_base_url)
+  let response_result = try {
+    http_request(
+    "POST",
+    host + GITLAB_OAUTH_TOKEN_PATH,
+    {
+    headers: {Accept: "application/json", ["Content-Type"]: "application/json"},
+    body: json_stringify(body),
+    retry: {max: 0, backoff_ms: 0},
+  },
+  )
+  }
+  if is_err(response_result) {
+    return __err("transport", to_string(unwrap_err(response_result)))
+  }
+  let response = unwrap(response_result)
+  if response.status < 200 || response.status >= 300 {
+    return __err(
+      "oauth_error",
+      "gitlab oauth request failed with status " + to_string(response.status) + ": " + response.body,
+    )
+  }
+  let parsed = try {
+    json_parse(response.body)
+  }
+  if is_err(parsed) {
+    return __err("invalid_response", "gitlab oauth endpoint returned invalid JSON")
+  }
+  return unwrap(parsed)
+}

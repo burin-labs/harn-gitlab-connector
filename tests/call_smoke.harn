@@ -1,0 +1,191 @@
+import { call } from "../src/lib"
+
+@complexity(allow)
+pipeline default() {
+  http_mock_clear()
+  let base = "https://gitlab-api.test/api/v4"
+  let token = "gitlab-access-token"
+  http_mock(
+    "POST",
+    base + "/projects/101/merge_requests/42/notes",
+    {status: 201, body: "{\"id\":501,\"body\":\"hello\"}", headers: {["ratelimit-remaining"]: "600"}},
+  )
+  let note = call(
+    "notes.create_merge_request_note",
+    {api_base_url: base, access_token: token, project_id: 101, merge_request_iid: 42, body: "hello"},
+  )
+  assert_eq(note.id, 501, "note id")
+  http_mock(
+    "POST",
+    base + "/projects/101/issues/17/notes",
+    {status: 201, body: "{\"id\":502}", headers: {["ratelimit-remaining"]: "599"}},
+  )
+  call(
+    "notes.create_issue_note",
+    {api_base_url: base, access_token: token, project_id: 101, issue_iid: 17, body: "repro note"},
+  )
+  http_mock(
+    "PUT",
+    base + "/projects/101/merge_requests/42",
+    {status: 200, body: "{\"iid\":42,\"description\":\"updated\"}"},
+  )
+  call(
+    "merge_requests.update",
+    {
+    api_base_url: base,
+    access_token: token,
+    project_id: 101,
+    merge_request_iid: 42,
+    description: "updated",
+  },
+  )
+  http_mock(
+    "POST",
+    base + "/projects/101/merge_requests/42/approve",
+    {status: 201, body: "{\"state\":\"approved\"}"},
+  )
+  call(
+    "merge_requests.approve",
+    {api_base_url: base, access_token: token, project_id: 101, merge_request_iid: 42},
+  )
+  http_mock(
+    "POST",
+    base + "/projects/101/statuses/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    {status: 201, body: "{\"status\":\"success\"}"},
+  )
+  call(
+    "commit_status.set",
+    {
+    api_base_url: base,
+    access_token: token,
+    project_id: 101,
+    sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    state: "success",
+    name: "harn-ci",
+  },
+  )
+  http_mock(
+    "GET",
+    base + "/projects/101/merge_requests/42/changes?per_page=2",
+    {status: 200, body: "{\"changes\":[]}"},
+  )
+  call(
+    "merge_requests.list_changes",
+    {api_base_url: base, access_token: token, project_id: 101, merge_request_iid: 42, per_page: 2},
+  )
+  http_mock(
+    "GET",
+    base + "/projects/101/repository/files/README.md?ref=main",
+    {status: 200, body: "{\"file_path\":\"README.md\",\"content\":\"abc\"}"},
+  )
+  let file = call(
+    "repository_files.get",
+    {api_base_url: base, access_token: token, project_id: 101, path: "README.md", ref: "main"},
+  )
+  assert_eq(file.file_path, "README.md", "file path")
+  http_mock(
+    "POST",
+    "https://gitlab-api.test/api/graphql",
+    {status: 200, body: "{\"data\":{\"currentUser\":{\"username\":\"ada\"}}}"},
+  )
+  let gql = call(
+    "graphql",
+    {
+    api_base_url: base,
+    access_token: token,
+    query: "query { currentUser { username } }",
+    variables: {},
+  },
+  )
+  assert_eq(gql.data.currentUser.username, "ada", "graphql user")
+  http_mock(
+    "GET",
+    base + "/projects/101/repository/files/README.md",
+    {
+    responses: [
+    {
+    status: 429,
+    body: "{\"message\":\"rate limited\"}",
+    headers: {["ratelimit-remaining"]: "0", ["ratelimit-reset"]: to_string(to_int(timestamp()) - 1)},
+  },
+    {status: 200, body: "{\"file_path\":\"README.md\"}"},
+  ],
+  },
+  )
+  let retried = call(
+    "repository_files.get",
+    {api_base_url: base, access_token: token, project_id: 101, path: "README.md"},
+  )
+  assert_eq(retried.file_path, "README.md", "retry succeeds")
+  http_mock_clear()
+  http_mock(
+    "GET",
+    base + "/projects/101/repository/files/README.md",
+    {
+    status: 429,
+    body: "{\"message\":\"rate limited\"}",
+    headers: {["ratelimit-remaining"]: "0", ["ratelimit-reset"]: to_string(to_int(timestamp()) + 120)},
+  },
+  )
+  let capped = call(
+    "repository_files.get",
+    {api_base_url: base, access_token: token, project_id: 101, path: "README.md"},
+  )
+  assert(is_err(capped), "rate-limit cap rejects")
+  assert_eq(unwrap_err(capped).code, "rate_limited", "rate-limit cap code")
+  let auth_url = call(
+    "oauth.authorize_url",
+    {
+    api_base_url: base,
+    client_id: "client-abc",
+    redirect_uri: "https://orchestrator.example.com/oauth/callback",
+    scope: "api read_user",
+    state: "xyz",
+  },
+  )
+  assert(contains(auth_url.authorize_url, "client_id=client-abc"), "authorize url includes client_id")
+  assert(
+    contains(auth_url.authorize_url, "response_type=code"),
+    "authorize url includes response_type",
+  )
+  http_mock(
+    "POST",
+    "https://gitlab-api.test/oauth/token",
+    {status: 200, body: "{\"access_token\":\"abc\",\"refresh_token\":\"def\",\"expires_in\":7200}"},
+  )
+  let tokens = call(
+    "oauth.exchange_code",
+    {
+    api_base_url: base,
+    client_id: "client-abc",
+    client_secret: "secret-xyz",
+    code: "code-123",
+    redirect_uri: "https://orchestrator.example.com/oauth/callback",
+  },
+  )
+  assert_eq(tokens.access_token, "abc", "oauth exchange access_token")
+  http_mock_clear()
+  http_mock(
+    "POST",
+    "https://gitlab-api.test/oauth/token",
+    {
+    status: 200,
+    body: "{\"access_token\":\"new\",\"refresh_token\":\"new-refresh\",\"expires_in\":7200}",
+  },
+  )
+  let refreshed = call(
+    "oauth.refresh_token",
+    {api_base_url: base, client_id: "client-abc", client_secret: "secret-xyz", refresh_token: "def"},
+  )
+  assert_eq(refreshed.access_token, "new", "oauth refresh access_token")
+  let missing_token = call(
+    "notes.create_merge_request_note",
+    {api_base_url: base, project_id: 101, merge_request_iid: 42, body: "hi"},
+  )
+  assert(is_err(missing_token), "missing access token rejects")
+  assert_eq(unwrap_err(missing_token).code, "missing_token", "missing token code")
+  let unsupported = call("projects.lock", {api_base_url: base, access_token: token})
+  assert(is_err(unsupported), "unsupported method rejected")
+  assert_eq(unwrap_err(unsupported).code, "method_not_found", "unsupported method code")
+  http_mock_clear()
+}

@@ -1,0 +1,12 @@
+[package]
+name = "harn-gitlab-connector"
+version = "0.0.0"
+description = "Pure-Harn GitLab connector: webhooks, OAuth2 + PAT auth, REST/GraphQL dispatch."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/burin-labs/harn-gitlab-connector"
+
+[exports]
+default = "src/lib.harn"
+
+# Harn package dependencies live here. No sibling SDK dependency for v0.
+[dependencies]
