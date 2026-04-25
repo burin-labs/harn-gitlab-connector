@@ -8,5 +8,9 @@ repository = "https://github.com/burin-labs/harn-gitlab-connector"
 [exports]
 default = "src/lib.harn"
 
+[[providers]]
+id = "gitlab"
+connector = { harn = "src/lib.harn" }
+
 # Harn package dependencies live here. No sibling SDK dependency for v0.
 [dependencies]
