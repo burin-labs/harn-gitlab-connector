@@ -39,19 +39,11 @@ pub fn kinds() {
 /** Return the canonical normalized GitLab event payload schema. */
 pub fn payload_schema() {
   return {
-    name: "GitLabEventPayload",
+    harn_schema_name: "GitLabEventPayload",
+    json_schema: {
     type: "object",
-    required: ["kind", "dedupe_key", "payload", "signature_status"],
-    properties: {
-    kind: {type: "string"},
-    occurred_at: {type: ["string", "null"]},
-    dedupe_key: {type: "string"},
-    signature_status: {type: "string", enum: ["signed", "unsigned", "unknown"]},
-    tenant_id: {type: ["string", "null"]},
-    headers: {type: ["object", "null"]},
-    payload: {
-    type: "object",
-    required: ["object_kind", "project", "actor"],
+    required: ["object_kind", "project", "actor", "raw"],
+    additionalProperties: true,
     properties: {
     object_kind: {type: "string"},
     event_name: {type: ["string", "null"]},
@@ -60,7 +52,7 @@ pub fn payload_schema() {
     type: "object",
     required: ["id"],
     properties: {
-    id: {type: ["int", "string"]},
+    id: {type: ["integer", "string"]},
     name: {type: ["string", "null"]},
     path_with_namespace: {type: ["string", "null"]},
     web_url: {type: ["string", "null"]},
@@ -70,7 +62,7 @@ pub fn payload_schema() {
     type: "object",
     required: ["id"],
     properties: {
-    id: {type: ["int", "string", "null"]},
+    id: {type: ["integer", "string", "null"]},
     username: {type: ["string", "null"]},
     name: {type: ["string", "null"]},
     email: {type: ["string", "null"]},
@@ -78,7 +70,6 @@ pub fn payload_schema() {
   },
     resource: {type: ["object", "null"]},
     raw: {type: "object"},
-  },
   },
   },
   }

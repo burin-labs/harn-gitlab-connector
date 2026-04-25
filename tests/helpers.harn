@@ -30,7 +30,7 @@ pub fn assert_gitlab_interface() {
   shutdown()
   assert_eq(provider_id(), "gitlab", "provider id")
   assert_eq(kinds()[0], "webhook", "webhook kind")
-  assert_eq(payload_schema().name, "GitLabEventPayload", "payload schema name")
+  assert_eq(payload_schema().harn_schema_name, "GitLabEventPayload", "payload schema name")
   let initialized = init({signing_secret: "test-secret"})
   assert(initialized.initialized == true, "init stores state")
   let activated = activate([{id: "primary", path: "/gitlab/events", secrets: {signing_secret: "test-secret"}}])
