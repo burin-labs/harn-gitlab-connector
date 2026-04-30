@@ -41,37 +41,37 @@ pub fn payload_schema() {
   return {
     harn_schema_name: "GitLabEventPayload",
     json_schema: {
-    type: "object",
-    required: ["object_kind", "project", "actor", "raw"],
-    additionalProperties: true,
-    properties: {
-    object_kind: {type: "string"},
-    event_name: {type: ["string", "null"]},
-    action: {type: ["string", "null"]},
-    project: {
-    type: "object",
-    required: ["id"],
-    properties: {
-    id: {type: ["integer", "string"]},
-    name: {type: ["string", "null"]},
-    path_with_namespace: {type: ["string", "null"]},
-    web_url: {type: ["string", "null"]},
-  },
-  },
-    actor: {
-    type: "object",
-    required: ["id"],
-    properties: {
-    id: {type: ["integer", "string", "null"]},
-    username: {type: ["string", "null"]},
-    name: {type: ["string", "null"]},
-    email: {type: ["string", "null"]},
-  },
-  },
-    resource: {type: ["object", "null"]},
-    raw: {type: "object"},
-  },
-  },
+      type: "object",
+      required: ["object_kind", "project", "actor", "raw"],
+      additionalProperties: true,
+      properties: {
+        object_kind: {type: "string"},
+        event_name: {type: ["string", "null"]},
+        action: {type: ["string", "null"]},
+        project: {
+          type: "object",
+          required: ["id"],
+          properties: {
+            id: {type: ["integer", "string"]},
+            name: {type: ["string", "null"]},
+            path_with_namespace: {type: ["string", "null"]},
+            web_url: {type: ["string", "null"]},
+          },
+        },
+        actor: {
+          type: "object",
+          required: ["id"],
+          properties: {
+            id: {type: ["integer", "string", "null"]},
+            username: {type: ["string", "null"]},
+            name: {type: ["string", "null"]},
+            email: {type: ["string", "null"]},
+          },
+        },
+        resource: {type: ["object", "null"]},
+        raw: {type: "object"},
+      },
+    },
   }
 }
 
@@ -167,10 +167,10 @@ pub fn call(method, args = {}) {
     return __gitlab_json(
       "POST",
       __gitlab_api_url(
-      cfg.api_base_url,
-      "/projects/" + __project_ref(args) + "/merge_requests/" + to_string(args.merge_request_iid)
-      + "/notes",
-    ),
+        cfg.api_base_url,
+        "/projects/" + __project_ref(args) + "/merge_requests/" + to_string(args.merge_request_iid)
+          + "/notes",
+      ),
       {body: args.body},
       cfg,
     )
@@ -179,9 +179,9 @@ pub fn call(method, args = {}) {
     return __gitlab_json(
       "POST",
       __gitlab_api_url(
-      cfg.api_base_url,
-      "/projects/" + __project_ref(args) + "/issues/" + to_string(args.issue_iid) + "/notes",
-    ),
+        cfg.api_base_url,
+        "/projects/" + __project_ref(args) + "/issues/" + to_string(args.issue_iid) + "/notes",
+      ),
       {body: args.body},
       cfg,
     )
@@ -190,9 +190,9 @@ pub fn call(method, args = {}) {
     return __gitlab_json(
       "PUT",
       __gitlab_api_url(
-      cfg.api_base_url,
-      "/projects/" + __project_ref(args) + "/merge_requests/" + to_string(args.merge_request_iid),
-    ),
+        cfg.api_base_url,
+        "/projects/" + __project_ref(args) + "/merge_requests/" + to_string(args.merge_request_iid),
+      ),
       __body_without(args, __config_keys() + ["project_id", "project_path", "merge_request_iid"]),
       cfg,
     )
@@ -201,11 +201,11 @@ pub fn call(method, args = {}) {
     return __gitlab_json(
       "GET",
       __gitlab_api_url(
-      cfg.api_base_url,
-      "/projects/" + __project_ref(args) + "/merge_requests/" + to_string(args.merge_request_iid)
-      + "/changes"
-      + __pagination_query(args),
-    ),
+        cfg.api_base_url,
+        "/projects/" + __project_ref(args) + "/merge_requests/" + to_string(args.merge_request_iid)
+          + "/changes"
+          + __pagination_query(args),
+      ),
       nil,
       cfg,
     )
@@ -214,10 +214,10 @@ pub fn call(method, args = {}) {
     return __gitlab_json(
       "POST",
       __gitlab_api_url(
-      cfg.api_base_url,
-      "/projects/" + __project_ref(args) + "/merge_requests/" + to_string(args.merge_request_iid)
-      + "/approve",
-    ),
+        cfg.api_base_url,
+        "/projects/" + __project_ref(args) + "/merge_requests/" + to_string(args.merge_request_iid)
+          + "/approve",
+      ),
       __body_without(args, __config_keys() + ["project_id", "project_path", "merge_request_iid"]),
       cfg,
     )
@@ -226,9 +226,9 @@ pub fn call(method, args = {}) {
     return __gitlab_json(
       "POST",
       __gitlab_api_url(
-      cfg.api_base_url,
-      "/projects/" + __project_ref(args) + "/statuses/" + to_string(args.sha),
-    ),
+        cfg.api_base_url,
+        "/projects/" + __project_ref(args) + "/statuses/" + to_string(args.sha),
+      ),
       __body_without(args, __config_keys() + ["project_id", "project_path", "sha"]),
       cfg,
     )
@@ -237,11 +237,11 @@ pub fn call(method, args = {}) {
     return __gitlab_json(
       "GET",
       __gitlab_api_url(
-      cfg.api_base_url,
-      "/projects/" + __project_ref(args) + "/repository/files/"
-      + url_encode(to_string(args.path ?? ""))
-      + __ref_query(args),
-    ),
+        cfg.api_base_url,
+        "/projects/" + __project_ref(args) + "/repository/files/"
+          + url_encode(to_string(args.path ?? ""))
+          + __ref_query(args),
+      ),
       nil,
       cfg,
     )
@@ -271,10 +271,10 @@ fn __reject(status, code, message) {
   return {
     type: "reject",
     reject: {
-    status: status,
-    body: json_stringify({error: code, message: message}),
-    content_type: "application/json",
-  },
+      status: status,
+      body: json_stringify({error: code, message: message}),
+      content_type: "application/json",
+    },
   }
 }
 
@@ -381,11 +381,11 @@ fn __build_event(object_kind, payload, raw, headers, signature_status) {
     signature_status: signature_status,
     payload: normalized_payload,
     headers: {
-    ["x-gitlab-event"]: __header(headers, "x-gitlab-event"),
-    ["x-gitlab-event-uuid"]: __header(headers, "x-gitlab-event-uuid"),
-    ["x-gitlab-instance"]: __header(headers, "x-gitlab-instance"),
-    ["x-gitlab-webhook-uuid"]: __header(headers, "x-gitlab-webhook-uuid"),
-  },
+      ["x-gitlab-event"]: __header(headers, "x-gitlab-event"),
+      ["x-gitlab-event-uuid"]: __header(headers, "x-gitlab-event-uuid"),
+      ["x-gitlab-instance"]: __header(headers, "x-gitlab-instance"),
+      ["x-gitlab-webhook-uuid"]: __header(headers, "x-gitlab-webhook-uuid"),
+    },
   }
 }
 
@@ -801,14 +801,14 @@ fn __oauth_token_request(args, body) {
   let host = __oauth_host(api_base_url)
   let response_result = try {
     http_request(
-    "POST",
-    host + GITLAB_OAUTH_TOKEN_PATH,
-    {
-    headers: {Accept: "application/json", ["Content-Type"]: "application/json"},
-    body: json_stringify(body),
-    retry: {max: 0, backoff_ms: 0},
-  },
-  )
+      "POST",
+      host + GITLAB_OAUTH_TOKEN_PATH,
+      {
+        headers: {Accept: "application/json", ["Content-Type"]: "application/json"},
+        body: json_stringify(body),
+        retry: {max: 0, backoff_ms: 0},
+      },
+    )
   }
   if is_err(response_result) {
     return __err("transport", to_string(unwrap_err(response_result)))

@@ -42,10 +42,10 @@ pipeline default() {
   let body = fixture_body("merge_request_opened")
   let wrong_token = gitlab_normalize(
     {
-    signing_secret: token,
-    body_text: body,
-    headers: gitlab_headers("wrong-token", "Merge Request Hook"),
-  },
+      signing_secret: token,
+      body_text: body,
+      headers: gitlab_headers("wrong-token", "Merge Request Hook"),
+    },
   )
   assert_eq(wrong_token.type, "reject", "wrong token rejects")
   assert_eq(wrong_token.reject.status, 401, "wrong token 401")
@@ -67,10 +67,10 @@ pipeline default() {
   let unsupported_body = replace(body_str, "\"merge_request\"", "\"workflow_run\"")
   let unsupported = gitlab_normalize(
     {
-    signing_secret: token,
-    body_text: unsupported_body,
-    headers: gitlab_headers(token, "Workflow Run Hook"),
-  },
+      signing_secret: token,
+      body_text: unsupported_body,
+      headers: gitlab_headers(token, "Workflow Run Hook"),
+    },
   )
   assert_eq(unsupported.type, "reject", "unsupported event rejects")
   shutdown()

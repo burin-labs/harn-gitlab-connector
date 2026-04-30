@@ -32,12 +32,12 @@ pipeline default() {
   call(
     "merge_requests.update",
     {
-    api_base_url: base,
-    access_token: token,
-    project_id: 101,
-    merge_request_iid: 42,
-    description: "updated",
-  },
+      api_base_url: base,
+      access_token: token,
+      project_id: 101,
+      merge_request_iid: 42,
+      description: "updated",
+    },
   )
   http_mock(
     "POST",
@@ -56,13 +56,13 @@ pipeline default() {
   call(
     "commit_status.set",
     {
-    api_base_url: base,
-    access_token: token,
-    project_id: 101,
-    sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    state: "success",
-    name: "harn-ci",
-  },
+      api_base_url: base,
+      access_token: token,
+      project_id: 101,
+      sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      state: "success",
+      name: "harn-ci",
+    },
   )
   http_mock(
     "GET",
@@ -91,26 +91,26 @@ pipeline default() {
   let gql = call(
     "graphql",
     {
-    api_base_url: base,
-    access_token: token,
-    query: "query { currentUser { username } }",
-    variables: {},
-  },
+      api_base_url: base,
+      access_token: token,
+      query: "query { currentUser { username } }",
+      variables: {},
+    },
   )
   assert_eq(gql.data.currentUser.username, "ada", "graphql user")
   http_mock(
     "GET",
     base + "/projects/101/repository/files/README.md",
     {
-    responses: [
-    {
-    status: 429,
-    body: "{\"message\":\"rate limited\"}",
-    headers: {["ratelimit-remaining"]: "0", ["ratelimit-reset"]: to_string(to_int(timestamp()) - 1)},
-  },
-    {status: 200, body: "{\"file_path\":\"README.md\"}"},
-  ],
-  },
+      responses: [
+        {
+          status: 429,
+          body: "{\"message\":\"rate limited\"}",
+          headers: {["ratelimit-remaining"]: "0", ["ratelimit-reset"]: to_string(to_int(timestamp()) - 1)},
+        },
+        {status: 200, body: "{\"file_path\":\"README.md\"}"},
+      ],
+    },
   )
   let retried = call(
     "repository_files.get",
@@ -122,10 +122,10 @@ pipeline default() {
     "GET",
     base + "/projects/101/repository/files/README.md",
     {
-    status: 429,
-    body: "{\"message\":\"rate limited\"}",
-    headers: {["ratelimit-remaining"]: "0", ["ratelimit-reset"]: to_string(to_int(timestamp()) + 120)},
-  },
+      status: 429,
+      body: "{\"message\":\"rate limited\"}",
+      headers: {["ratelimit-remaining"]: "0", ["ratelimit-reset"]: to_string(to_int(timestamp()) + 120)},
+    },
   )
   let capped = call(
     "repository_files.get",
@@ -136,12 +136,12 @@ pipeline default() {
   let auth_url = call(
     "oauth.authorize_url",
     {
-    api_base_url: base,
-    client_id: "client-abc",
-    redirect_uri: "https://orchestrator.example.com/oauth/callback",
-    scope: "api read_user",
-    state: "xyz",
-  },
+      api_base_url: base,
+      client_id: "client-abc",
+      redirect_uri: "https://orchestrator.example.com/oauth/callback",
+      scope: "api read_user",
+      state: "xyz",
+    },
   )
   assert(contains(auth_url.authorize_url, "client_id=client-abc"), "authorize url includes client_id")
   assert(
@@ -156,12 +156,12 @@ pipeline default() {
   let tokens = call(
     "oauth.exchange_code",
     {
-    api_base_url: base,
-    client_id: "client-abc",
-    client_secret: "secret-xyz",
-    code: "code-123",
-    redirect_uri: "https://orchestrator.example.com/oauth/callback",
-  },
+      api_base_url: base,
+      client_id: "client-abc",
+      client_secret: "secret-xyz",
+      code: "code-123",
+      redirect_uri: "https://orchestrator.example.com/oauth/callback",
+    },
   )
   assert_eq(tokens.access_token, "abc", "oauth exchange access_token")
   http_mock_clear()
@@ -169,9 +169,9 @@ pipeline default() {
     "POST",
     "https://gitlab-api.test/oauth/token",
     {
-    status: 200,
-    body: "{\"access_token\":\"new\",\"refresh_token\":\"new-refresh\",\"expires_in\":7200}",
-  },
+      status: 200,
+      body: "{\"access_token\":\"new\",\"refresh_token\":\"new-refresh\",\"expires_in\":7200}",
+    },
   )
   let refreshed = call(
     "oauth.refresh_token",
