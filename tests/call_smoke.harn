@@ -8,7 +8,7 @@ pipeline default() {
   http_mock(
     "POST",
     base + "/projects/101/merge_requests/42/notes",
-    {status: 201, body: "{\"id\":501,\"body\":\"hello\"}", headers: {["ratelimit-remaining"]: "600"}},
+    {status: 201, body: "{\"id\":501,\"body\":\"hello\"}", headers: {"ratelimit-remaining": "600"}},
   )
   let note = call(
     "notes.create_merge_request_note",
@@ -18,7 +18,7 @@ pipeline default() {
   http_mock(
     "POST",
     base + "/projects/101/issues/17/notes",
-    {status: 201, body: "{\"id\":502}", headers: {["ratelimit-remaining"]: "599"}},
+    {status: 201, body: "{\"id\":502}", headers: {"ratelimit-remaining": "599"}},
   )
   call(
     "notes.create_issue_note",
@@ -106,7 +106,7 @@ pipeline default() {
         {
           status: 429,
           body: "{\"message\":\"rate limited\"}",
-          headers: {["ratelimit-remaining"]: "0", ["ratelimit-reset"]: to_string(to_int(timestamp()) - 1)},
+          headers: {"ratelimit-remaining": "0", "ratelimit-reset": to_string(to_int(timestamp()) - 1)},
         },
         {status: 200, body: "{\"file_path\":\"README.md\"}"},
       ],
@@ -124,7 +124,7 @@ pipeline default() {
     {
       status: 429,
       body: "{\"message\":\"rate limited\"}",
-      headers: {["ratelimit-remaining"]: "0", ["ratelimit-reset"]: to_string(to_int(timestamp()) + 120)},
+      headers: {"ratelimit-remaining": "0", "ratelimit-reset": to_string(to_int(timestamp()) + 120)},
     },
   )
   let capped = call(

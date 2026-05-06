@@ -10,7 +10,7 @@ import {
 } from "../src/lib"
 
 pub fn gitlab_headers(token, event, event_uuid = "event-uuid-1") {
-  return {["x-gitlab-event"]: event, ["x-gitlab-event-uuid"]: event_uuid, ["x-gitlab-token"]: token}
+  return {"x-gitlab-event": event, "x-gitlab-event-uuid": event_uuid, "x-gitlab-token": token}
 }
 
 pub fn signed_raw(token, body, event, extra = nil) {

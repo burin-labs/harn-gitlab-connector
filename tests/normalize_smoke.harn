@@ -50,12 +50,12 @@ pipeline default() {
   assert_eq(wrong_token.type, "reject", "wrong token rejects")
   assert_eq(wrong_token.reject.status, 401, "wrong token 401")
   let missing_token = gitlab_normalize(
-    {signing_secret: token, body_text: body, headers: {["x-gitlab-event"]: "Merge Request Hook"}},
+    {signing_secret: token, body_text: body, headers: {"x-gitlab-event": "Merge Request Hook"}},
   )
   assert_eq(missing_token.type, "reject", "missing token rejects")
   assert_eq(missing_token.reject.status, 401, "missing token 401")
   shutdown()
-  let unsigned = gitlab_normalize({body_text: body, headers: {["x-gitlab-event"]: "Merge Request Hook"}})
+  let unsigned = gitlab_normalize({body_text: body, headers: {"x-gitlab-event": "Merge Request Hook"}})
   assert_eq(unsigned.type, "event", "unsigned accepted when no secret configured")
   assert_eq(unsigned.event.signature_status, "unsigned", "unsigned signature_status")
   let invalid_json = gitlab_normalize(

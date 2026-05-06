@@ -381,10 +381,10 @@ fn __build_event(object_kind, payload, raw, headers, signature_status) {
     signature_status: signature_status,
     payload: normalized_payload,
     headers: {
-      ["x-gitlab-event"]: __header(headers, "x-gitlab-event"),
-      ["x-gitlab-event-uuid"]: __header(headers, "x-gitlab-event-uuid"),
-      ["x-gitlab-instance"]: __header(headers, "x-gitlab-instance"),
-      ["x-gitlab-webhook-uuid"]: __header(headers, "x-gitlab-webhook-uuid"),
+      "x-gitlab-event": __header(headers, "x-gitlab-event"),
+      "x-gitlab-event-uuid": __header(headers, "x-gitlab-event-uuid"),
+      "x-gitlab-instance": __header(headers, "x-gitlab-instance"),
+      "x-gitlab-webhook-uuid": __header(headers, "x-gitlab-webhook-uuid"),
     },
   }
 }
@@ -804,7 +804,7 @@ fn __oauth_token_request(args, body) {
       "POST",
       host + GITLAB_OAUTH_TOKEN_PATH,
       {
-        headers: {Accept: "application/json", ["Content-Type"]: "application/json"},
+        headers: {Accept: "application/json", "Content-Type": "application/json"},
         body: json_stringify(body),
         retry: {max: 0, backoff_ms: 0},
       },
