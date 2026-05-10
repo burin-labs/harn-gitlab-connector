@@ -12,5 +12,31 @@ default = "src/lib.harn"
 id = "gitlab"
 connector = { harn = "src/lib.harn" }
 
+[providers.setup]
+auth_type = "oauth2"
+flow = "oauth2"
+required_scopes = ["api"]
+required_secrets = ["gitlab/access-token", "gitlab/webhook-token"]
+setup_command = ["harn", "connect", "gitlab"]
+validation_command = ["harn", "connect", "status", "--connector", "gitlab", "--json"]
+
+[[providers.setup.health_checks]]
+id = "access-token"
+kind = "secret"
+secret = "gitlab/access-token"
+
+[[providers.setup.health_checks]]
+id = "webhook-token"
+kind = "secret"
+secret = "gitlab/webhook-token"
+
+[providers.setup.recovery]
+missing_auth = "Store gitlab/access-token and gitlab/webhook-token before enabling GitLab bindings."
+expired_credentials = "Refresh the OAuth token or rotate the access token, then rerun GitLab validation."
+revoked_credentials = "Replace gitlab/access-token with an active OAuth, personal, project, or group access token."
+missing_scopes = "Grant the api scope or narrower scopes required by the configured GitLab workflows."
+inaccessible_resource = "Confirm the token can access the target GitLab host, namespace, project, or group."
+transient_provider_outage = "Retry after the GitLab API and webhook endpoints are healthy."
+
 # Harn package dependencies live here. No sibling SDK dependency for v0.
 [dependencies]
