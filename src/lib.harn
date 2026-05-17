@@ -673,12 +673,10 @@ fn __gitlab_json(method, url, body, cfg) {
     if response.status < 200 || response.status >= 300 {
       let code = if response.status == 429 || response.status == 503 {
         "rate_limited"
+      } else if response.status == 401 || response.status == 403 {
+        "unauthorized"
       } else {
-        if response.status == 401 || response.status == 403 {
-          "unauthorized"
-        } else {
-          "transport"
-        }
+        "transport"
       }
       return __err(
         code,
