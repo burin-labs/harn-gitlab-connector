@@ -1,8 +1,10 @@
-import { shutdown } from "../src/lib"
+import { init, shutdown } from "../src/lib"
 import { fixture_raw, gitlab_normalize } from "./helpers"
 
 pipeline default() {
   let token = "test-signing-token"
+  shutdown()
+  init({signing_secret: token})
   let cases = [
     ["push", "Push Hook", "push"],
     ["tag_push", "Tag Push Hook", "tag_push"],

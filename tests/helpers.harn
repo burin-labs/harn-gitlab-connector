@@ -13,15 +13,19 @@ pub fn gitlab_headers(token, event, event_uuid = "event-uuid-1") {
   return {"x-gitlab-event": event, "x-gitlab-event-uuid": event_uuid, "x-gitlab-token": token}
 }
 
+/**
+ * Build a raw inbound envelope WITHOUT embedding the signing secret. Tests must seed the secret via `init({signing_secret: secret})` before calling normalize_inbound.
+ */
 pub fn signed_raw(token, body, event, extra = nil) {
-  return extra ?? {}
-    + {signing_secret: token, body_text: body, headers: gitlab_headers(token, event)}
+  return extra ?? {} + {body_text: body, headers: gitlab_headers(token, event)}
 }
 
+/** Read a fixture JSON body from the test fixtures directory. */
 pub fn fixture_body(name) {
   return read_file(source_dir() + "/fixtures/webhooks/" + name + ".json")
 }
 
+/** Build a signed raw inbound envelope from a named fixture. */
 pub fn fixture_raw(name, token, event, extra = nil) {
   return signed_raw(token, fixture_body(name), event, extra)
 }

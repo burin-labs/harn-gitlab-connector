@@ -1,4 +1,4 @@
-import { shutdown } from "../src/lib"
+import { activate, init, shutdown } from "../src/lib"
 import {
   assert_gitlab_interface,
   fixture_body,
@@ -11,6 +11,7 @@ import {
 pipeline default() {
   let token = "test-signing-token"
   assert_gitlab_interface()
+  init({signing_secret: token})
   let mr = gitlab_normalize(fixture_raw("merge_request_opened", token, "Merge Request Hook"))
   assert_eq(mr.type, "event", "mr envelope type")
   assert_eq(mr.event.kind, "merge_request.open", "mr kind")
@@ -40,38 +41,37 @@ pipeline default() {
   let pipeline_bad = gitlab_normalize(fixture_raw("pipeline_failed", token, "Pipeline Hook"))
   assert_eq(pipeline_bad.event.kind, "pipeline.failed", "pipeline failed kind")
   let body = fixture_body("merge_request_opened")
-  let wrong_token = gitlab_normalize(
-    {
-      signing_secret: token,
-      body_text: body,
-      headers: gitlab_headers("wrong-token", "Merge Request Hook"),
-    },
-  )
+  let wrong_token = gitlab_normalize({body_text: body, headers: gitlab_headers("wrong-token", "Merge Request Hook")})
   assert_eq(wrong_token.type, "reject", "wrong token rejects")
   assert_eq(wrong_token.reject.status, 401, "wrong token 401")
-  let missing_token = gitlab_normalize(
-    {signing_secret: token, body_text: body, headers: {"x-gitlab-event": "Merge Request Hook"}},
-  )
+  let missing_token = gitlab_normalize({body_text: body, headers: {"x-gitlab-event": "Merge Request Hook"}})
   assert_eq(missing_token.type, "reject", "missing token rejects")
   assert_eq(missing_token.reject.status, 401, "missing token 401")
   shutdown()
-  let unsigned = gitlab_normalize({body_text: body, headers: {"x-gitlab-event": "Merge Request Hook"}})
-  assert_eq(unsigned.type, "event", "unsigned accepted when no secret configured")
-  assert_eq(unsigned.event.signature_status, "unsigned", "unsigned signature_status")
-  let invalid_json = gitlab_normalize(
-    {signing_secret: token, body_text: "{not json", headers: gitlab_headers(token, "Push Hook")},
+  // F1 fail-closed: with no secret configured AND no allow_unsigned opt-in,
+  // unsigned webhooks are rejected with 401 missing_secret.
+  let unsigned_default = gitlab_normalize({body_text: body, headers: {"x-gitlab-event": "Merge Request Hook"}})
+  assert_eq(unsigned_default.type, "reject", "unsigned rejects when no secret configured")
+  assert_eq(unsigned_default.reject.status, 401, "unsigned reject status 401")
+  // F1 opt-in: a binding can explicitly enable the unsigned path via allow_unsigned.
+  activate([{binding_id: "lenient", path: "/gitlab/lenient", allow_unsigned: true}])
+  let unsigned_opted = gitlab_normalize(
+    {
+      body_text: body,
+      headers: {"x-gitlab-event": "Merge Request Hook"},
+      metadata: {binding_id: "lenient"},
+    },
   )
+  assert_eq(unsigned_opted.type, "event", "unsigned accepted when binding opts in")
+  assert_eq(unsigned_opted.event.signature_status, "unsigned", "unsigned signature_status")
+  shutdown()
+  init({signing_secret: token})
+  let invalid_json = gitlab_normalize({body_text: "{not json", headers: gitlab_headers(token, "Push Hook")})
   assert_eq(invalid_json.type, "reject", "invalid json rejects")
   assert_eq(invalid_json.reject.status, 400, "invalid json 400")
   let body_str = fixture_body("merge_request_opened")
   let unsupported_body = replace(body_str, "\"merge_request\"", "\"workflow_run\"")
-  let unsupported = gitlab_normalize(
-    {
-      signing_secret: token,
-      body_text: unsupported_body,
-      headers: gitlab_headers(token, "Workflow Run Hook"),
-    },
-  )
+  let unsupported = gitlab_normalize({body_text: unsupported_body, headers: gitlab_headers(token, "Workflow Run Hook")})
   assert_eq(unsupported.type, "reject", "unsupported event rejects")
   shutdown()
 }
