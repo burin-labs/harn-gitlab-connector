@@ -22,7 +22,7 @@ pub fn signed_raw(token, body, event, extra = nil) {
 
 /** Read a fixture JSON body from the test fixtures directory. */
 pub fn fixture_body(name) {
-  return read_file(source_dir() + "/fixtures/webhooks/" + name + ".json")
+  return harness.fs.read_text(source_dir() + "/fixtures/webhooks/" + name + ".json")
 }
 
 /** Build a signed raw inbound envelope from a named fixture. */
@@ -36,7 +36,7 @@ pub fn assert_gitlab_interface() {
   assert_eq(kinds()[0], "webhook", "webhook kind")
   assert_eq(payload_schema().harn_schema_name, "GitLabEventPayload", "payload schema name")
   let initialized = init({signing_secret: "test-secret"})
-  assert(initialized.initialized == true, "init stores state")
+  assert(initialized.initialized, "init stores state")
   let activated = activate([{id: "primary", path: "/gitlab/events", secrets: {signing_secret: "test-secret"}}])
   assert_eq(activated.bindings, 1, "activate counts bindings")
 }
