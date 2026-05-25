@@ -588,7 +588,7 @@ fn __occurred_at(object_kind, payload, raw) {
 
 @complexity(allow)
 fn __outbound_config(args) {
-  let api_base_url = args?.api_base_url ?? env_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
+  let api_base_url = args?.api_base_url ?? harness.env.get_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
   let base_check = __validate_api_base_url(api_base_url)
   if is_err(base_check) {
     return base_check
@@ -596,8 +596,8 @@ fn __outbound_config(args) {
   let access_token = args?.access_token ?? args?.personal_access_token ?? args?.project_access_token ?? args?.token
     ?? args?.bindings?.access_token
     ?? args?.secrets?.access_token
-    ?? env("GITLAB_ACCESS_TOKEN")
-    ?? env("GITLAB_TOKEN")
+    ?? harness.env.get("GITLAB_ACCESS_TOKEN")
+    ?? harness.env.get("GITLAB_TOKEN")
   if access_token == nil || trim(to_string(access_token)) == "" {
     return __err(
       "missing_token",
@@ -807,7 +807,7 @@ fn __gitlab_json(method, url, body, cfg) {
   var retried_rate_limit = false
   while true {
     let response_result = try {
-      http_request(method, url, options)
+      harness.net.request(method, url, options)
     }
     if is_err(response_result) {
       return __err("transport", to_string(unwrap_err(response_result)))
@@ -862,7 +862,7 @@ fn __maybe_wait_for_rate_limit(response) {
   if is_err(parsed_reset) {
     return Ok(true)
   }
-  let wait_seconds = unwrap(parsed_reset) - to_int(timestamp())
+  let wait_seconds = unwrap(parsed_reset) - to_int(harness.clock.timestamp())
   if wait_seconds > 60 {
     return __err("rate_limited", "gitlab API rate limit reset is more than 60 seconds away")
   }
@@ -874,7 +874,7 @@ fn __maybe_wait_for_rate_limit(response) {
 
 @complexity(allow)
 fn __oauth_authorize_url(args) {
-  let api_base_url = args?.api_base_url ?? env_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
+  let api_base_url = args?.api_base_url ?? harness.env.get_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
   let base_check = __validate_api_base_url(api_base_url)
   if is_err(base_check) {
     return base_check
@@ -950,14 +950,15 @@ fn __oauth_refresh_token(args) {
 }
 
 fn __oauth_token_request(args, body) {
-  let api_base_url = args?.api_base_url ?? env_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
+  let api_base_url = args?.api_base_url ?? harness.env.get_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
   let base_check = __validate_api_base_url(api_base_url)
   if is_err(base_check) {
     return base_check
   }
   let host = __oauth_host(api_base_url)
   let response_result = try {
-    http_request(
+    harness.net
+      .request(
       "POST",
       host + GITLAB_OAUTH_TOKEN_PATH,
       {
