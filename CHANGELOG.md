@@ -5,7 +5,23 @@ this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0
 
 ## [Unreleased]
 
+## [0.1.0]
+
 ### Added
+
+- Merge-conflict surfacing on `merge_request` events: the normalized
+  resource now carries `detailed_merge_status`, `is_conflict`, and a
+  derived `merge_state`. A conflict is signalled when
+  `detailed_merge_status == "conflict"` or the legacy
+  `merge_status == "cannot_be_merged"`.
+- `@`-mention command extraction on `note` events (MR and issue notes).
+  The normalized payload gains a `mention` block
+  (`{actor, candidates: [{handle, command, rest}], target_kind,
+  target_id, url}`) parsed from the note body with CPU-only string
+  scanning. Notes without a leading `@handle command` mention omit the
+  block.
+
+### Changed (initial scaffold, pre-0.1.0)
 
 - Initial pure-Harn GitLab connector scaffold (connector interface
   skeleton, payload schema, lifecycle functions).
@@ -23,4 +39,5 @@ this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0
 - Smoke tests covering happy paths, tampered payloads, missing tokens,
   and unsupported methods.
 
-[Unreleased]: https://github.com/burin-labs/harn-gitlab-connector/compare/main
+[Unreleased]: https://github.com/burin-labs/harn-gitlab-connector/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/burin-labs/harn-gitlab-connector/releases/tag/v0.1.0
