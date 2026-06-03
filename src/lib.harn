@@ -421,6 +421,7 @@ fn __build_event(object_kind, payload, raw, headers, signature_status) {
     project: project,
     actor: actor,
     resource: resource,
+    mention: __mention_block(object_kind, payload, actor),
     raw: payload,
   }
   return {
@@ -495,15 +496,19 @@ fn __resource(object_kind, payload) {
   }
   if object_kind == "merge_request" {
     let attrs = payload?.object_attributes ?? {}
+    let merge = __merge_state(attrs)
     return {
+      detailed_merge_status: attrs?.detailed_merge_status,
+      draft: attrs?.draft ?? attrs?.work_in_progress,
       id: attrs?.id,
       iid: attrs?.iid,
-      title: attrs?.title,
-      state: attrs?.state,
-      source_branch: attrs?.source_branch,
-      target_branch: attrs?.target_branch,
+      is_conflict: merge.is_conflict,
+      merge_state: merge.merge_state,
       merge_status: attrs?.merge_status,
-      draft: attrs?.draft ?? attrs?.work_in_progress,
+      source_branch: attrs?.source_branch,
+      state: attrs?.state,
+      target_branch: attrs?.target_branch,
+      title: attrs?.title,
       url: attrs?.url,
     }
   }
@@ -530,6 +535,110 @@ fn __resource(object_kind, payload) {
     detailed_status: attrs?.detailed_status,
     url: attrs?.url,
   }
+}
+
+/**
+ * Derive a normalized `{is_conflict, merge_state}` view from a GitLab merge
+ * request's `object_attributes`. GitLab signals a conflicting MR via either
+ * `detailed_merge_status == "conflict"` (15.6+) or the legacy
+ * `merge_status == "cannot_be_merged"`.
+ */
+fn __merge_state(attrs) {
+  let detailed = attrs?.detailed_merge_status
+  let merge_status = attrs?.merge_status
+  let is_conflict = lowercase(to_string(detailed ?? "")) == "conflict"
+    || lowercase(to_string(merge_status ?? "")) == "cannot_be_merged"
+  let merge_state = detailed ?? merge_status ?? "unknown"
+  return {is_conflict: is_conflict, merge_state: to_string(merge_state)}
+}
+
+/**
+ * Build an `@`-mention command block for `note` events (MR and issue notes).
+ * Scans the note body for `@handle command args...` lines and returns a
+ * `{actor, candidates, target_id, target_kind, url?}` block, or nil when the
+ * event is not a note or no mentions are present. CPU-only string parsing.
+ */
+fn __mention_block(object_kind, payload, actor) {
+  if object_kind != "note" {
+    return nil
+  }
+  let attrs = payload?.object_attributes ?? {}
+  let body = to_string(attrs?.note ?? "")
+  let candidates = __extract_mentions(body)
+  if len(candidates) == 0 {
+    return nil
+  }
+  let noteable_type = lowercase(to_string(attrs?.noteable_type ?? ""))
+  let target_kind = if noteable_type == "mergerequest" {
+    "merge_request"
+  } else if noteable_type == "issue" {
+    "issue"
+  } else if noteable_type != "" {
+    noteable_type
+  } else {
+    "unknown"
+  }
+  let target_id = payload?.merge_request?.iid ?? payload?.issue?.iid
+    ?? attrs?.noteable_id
+    ?? attrs?.noteable_iid
+  return {
+    actor: actor,
+    candidates: candidates,
+    target_id: target_id,
+    target_kind: target_kind,
+    url: attrs?.url,
+  }
+}
+
+/**
+ * Extract `@handle command args...` mentions from free text. Each line is
+ * scanned token-by-token; the first `@handle` followed by a command word
+ * yields one candidate `{command, handle, rest}`. Pure string parsing.
+ */
+fn __extract_mentions(body) {
+  var candidates = []
+  for line in split(to_string(body), "\n") {
+    let tokens = __whitespace_tokens(line)
+    if len(tokens) < 2 {
+      continue
+    }
+    let first = tokens[0]
+    if !starts_with(first, "@") || len(first) < 2 {
+      continue
+    }
+    let handle = first[1:len(first)]
+    if handle == "" {
+      continue
+    }
+    let command = tokens[1]
+    let rest = if len(tokens) > 2 {
+      join(tokens[2:len(tokens)], " ")
+    } else {
+      ""
+    }
+    candidates = candidates + [{command: command, handle: handle, rest: rest}]
+  }
+  return candidates
+}
+
+/** Split text on ASCII whitespace runs, dropping empty tokens. */
+fn __whitespace_tokens(text) {
+  var tokens = []
+  var current = ""
+  for ch in split(to_string(text), "") {
+    if ch == " " || ch == "\t" || ch == "\r" {
+      if current != "" {
+        tokens = tokens + [current]
+        current = ""
+      }
+    } else {
+      current = current + ch
+    }
+  }
+  if current != "" {
+    tokens = tokens + [current]
+  }
+  return tokens
 }
 
 @complexity(allow)
