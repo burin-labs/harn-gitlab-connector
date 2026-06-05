@@ -17,7 +17,7 @@ Trigger recipes and outbound helpers for GitLab via the pure-Harn
 
 ## Trigger recipe — welcome comment on new merge requests
 
-```harn
+```text
 import gitlab_connector from "harn-gitlab-connector"
 
 trigger mr_welcome on gitlab {
@@ -40,7 +40,9 @@ trigger mr_welcome on gitlab {
 
 ## Trigger recipe — auto-comment on failed pipelines
 
-```harn
+```text
+import gitlab_connector from "harn-gitlab-connector"
+
 trigger pipeline_failed on gitlab {
   source = {
     kind: "webhook",
