@@ -2,52 +2,52 @@ import { init, shutdown } from "../src/lib"
 import { fixture_raw, gitlab_normalize } from "./helpers"
 
 pipeline default() {
-  let token = "test-signing-token"
+  const token = "test-signing-token"
   shutdown()
   init({signing_secret: token})
   // Merge-state surfacing: a clean MR exposes is_conflict=false and a
   // merge_state derived from detailed_merge_status.
-  let clean = gitlab_normalize(fixture_raw("merge_request_opened", token, "Merge Request Hook"))
+  const clean = gitlab_normalize(fixture_raw("merge_request_opened", token, "Merge Request Hook"))
   assert_eq(clean.type, "event", "clean MR envelope")
-  let clean_resource = clean.event.payload.resource
+  const clean_resource = clean.event.payload.resource
   assert_eq(clean_resource.is_conflict, false, "clean MR is not a conflict")
   assert_eq(clean_resource.merge_state, "mergeable", "clean MR merge_state")
   assert_eq(clean_resource.detailed_merge_status, "mergeable", "clean MR detailed status")
   // A conflicting MR (detailed_merge_status=conflict, merge_status=cannot_be_merged)
   // surfaces is_conflict=true.
-  let conflict = gitlab_normalize(fixture_raw("merge_request_conflict", token, "Merge Request Hook"))
+  const conflict = gitlab_normalize(fixture_raw("merge_request_conflict", token, "Merge Request Hook"))
   assert_eq(conflict.type, "event", "conflict MR envelope")
-  let conflict_resource = conflict.event.payload.resource
+  const conflict_resource = conflict.event.payload.resource
   assert_eq(conflict_resource.is_conflict, true, "conflict MR is a conflict")
   assert_eq(conflict_resource.merge_state, "conflict", "conflict MR merge_state")
   assert_eq(conflict_resource.merge_status, "cannot_be_merged", "conflict MR merge_status")
   // A merged MR is not a conflict.
-  let merged = gitlab_normalize(fixture_raw("merge_request_merged", token, "Merge Request Hook"))
+  const merged = gitlab_normalize(fixture_raw("merge_request_merged", token, "Merge Request Hook"))
   assert_eq(merged.event.payload.resource.is_conflict, false, "merged MR is not a conflict")
   // @-mention extraction on an MR note.
-  let mr_note = gitlab_normalize(fixture_raw("note_mr_mention", token, "Note Hook"))
+  const mr_note = gitlab_normalize(fixture_raw("note_mr_mention", token, "Note Hook"))
   assert_eq(mr_note.type, "event", "MR note envelope")
-  let mr_mention = mr_note.event.payload.mention
+  const mr_mention = mr_note.event.payload.mention
   assert(mr_mention != nil, "MR note has a mention block")
   assert_eq(mr_mention.target_kind, "merge_request", "MR note target kind")
   assert_eq(mr_mention.target_id, 42, "MR note target id is the MR iid")
   assert_eq(mr_mention.actor.username, "linus", "MR note actor")
   assert(ends_with(to_string(mr_mention.url), "#note_503"), "MR note url")
   assert_eq(len(mr_mention.candidates), 1, "one MR mention candidate")
-  let mr_cand = mr_mention.candidates[0]
+  const mr_cand = mr_mention.candidates[0]
   assert_eq(mr_cand.handle, "harn-bot", "MR mention handle")
   assert_eq(mr_cand.command, "deploy", "MR mention command")
   assert_eq(mr_cand.rest, "staging now", "MR mention rest")
   // @-mention extraction on an issue note.
-  let issue_note = gitlab_normalize(fixture_raw("note_issue_mention", token, "Note Hook"))
-  let issue_mention = issue_note.event.payload.mention
+  const issue_note = gitlab_normalize(fixture_raw("note_issue_mention", token, "Note Hook"))
+  const issue_mention = issue_note.event.payload.mention
   assert(issue_mention != nil, "issue note has a mention block")
   assert_eq(issue_mention.target_kind, "issue", "issue note target kind")
   assert_eq(issue_mention.target_id, 17, "issue note target id is the issue iid")
   assert_eq(issue_mention.candidates[0].command, "triage", "issue mention command")
   assert_eq(issue_mention.candidates[0].rest, "P1", "issue mention rest")
   // A note without any @-mention yields no mention block.
-  let plain_note = gitlab_normalize(fixture_raw("note_mr", token, "Note Hook"))
+  const plain_note = gitlab_normalize(fixture_raw("note_mr", token, "Note Hook"))
   assert_eq(plain_note.event.payload.mention, nil, "plain note has no mention block")
   // Non-note events never carry a mention block.
   assert_eq(clean.event.payload.mention, nil, "MR event has no mention block")
