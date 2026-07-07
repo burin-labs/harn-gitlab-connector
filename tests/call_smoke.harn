@@ -4,14 +4,14 @@ import { call } from "../src/lib"
 pipeline default() {
   egress_policy({allow: ["gitlab-api.test"], default: "deny"})
   http_mock_clear()
-  let base = "https://gitlab-api.test/api/v4"
-  let token = "gitlab-access-token"
+  const base = "https://gitlab-api.test/api/v4"
+  const token = "gitlab-access-token"
   http_mock(
     "POST",
     base + "/projects/101/merge_requests/42/notes",
     {status: 201, body: "{\"id\":501,\"body\":\"hello\"}", headers: {"ratelimit-remaining": "600"}},
   )
-  let note = call(
+  const note = call(
     "notes.create_merge_request_note",
     {api_base_url: base, access_token: token, project_id: 101, merge_request_iid: 42, body: "hello"},
   )
@@ -79,7 +79,7 @@ pipeline default() {
     base + "/projects/101/repository/files/README.md?ref=main",
     {status: 200, body: "{\"file_path\":\"README.md\",\"content\":\"abc\"}"},
   )
-  let file = call(
+  const file = call(
     "repository_files.get",
     {api_base_url: base, access_token: token, project_id: 101, path: "README.md", ref: "main"},
   )
@@ -89,7 +89,7 @@ pipeline default() {
     "https://gitlab-api.test/api/graphql",
     {status: 200, body: "{\"data\":{\"currentUser\":{\"username\":\"ada\"}}}"},
   )
-  let gql = call(
+  const gql = call(
     "graphql",
     {
       api_base_url: base,
@@ -113,7 +113,7 @@ pipeline default() {
       ],
     },
   )
-  let retried = call(
+  const retried = call(
     "repository_files.get",
     {api_base_url: base, access_token: token, project_id: 101, path: "README.md"},
   )
@@ -128,13 +128,13 @@ pipeline default() {
       headers: {"ratelimit-remaining": "0", "ratelimit-reset": to_string(to_int(harness.clock.timestamp()) + 120)},
     },
   )
-  let capped = call(
+  const capped = call(
     "repository_files.get",
     {api_base_url: base, access_token: token, project_id: 101, path: "README.md"},
   )
   assert(is_err(capped), "rate-limit cap rejects")
   assert_eq(unwrap_err(capped).code, "rate_limited", "rate-limit cap code")
-  let auth_url = call(
+  const auth_url = call(
     "oauth.authorize_url",
     {
       api_base_url: base,
@@ -154,7 +154,7 @@ pipeline default() {
     "https://gitlab-api.test/oauth/token",
     {status: 200, body: "{\"access_token\":\"abc\",\"refresh_token\":\"def\",\"expires_in\":7200}"},
   )
-  let tokens = call(
+  const tokens = call(
     "oauth.exchange_code",
     {
       api_base_url: base,
@@ -174,18 +174,18 @@ pipeline default() {
       body: "{\"access_token\":\"new\",\"refresh_token\":\"new-refresh\",\"expires_in\":7200}",
     },
   )
-  let refreshed = call(
+  const refreshed = call(
     "oauth.refresh_token",
     {api_base_url: base, client_id: "client-abc", client_secret: "secret-xyz", refresh_token: "def"},
   )
   assert_eq(refreshed.access_token, "new", "oauth refresh access_token")
-  let missing_token = call(
+  const missing_token = call(
     "notes.create_merge_request_note",
     {api_base_url: base, project_id: 101, merge_request_iid: 42, body: "hi"},
   )
   assert(is_err(missing_token), "missing access token rejects")
   assert_eq(unwrap_err(missing_token).code, "missing_token", "missing token code")
-  let unsupported = call("projects.lock", {api_base_url: base, access_token: token})
+  const unsupported = call("projects.lock", {api_base_url: base, access_token: token})
   assert(is_err(unsupported), "unsupported method rejected")
   assert_eq(unwrap_err(unsupported).code, "method_not_found", "unsupported method code")
   http_mock_clear()

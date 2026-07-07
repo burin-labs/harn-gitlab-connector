@@ -1,20 +1,20 @@
-let GITLAB_PROVIDER_ID = "gitlab"
+const GITLAB_PROVIDER_ID = "gitlab"
 
-let GITLAB_STATE_KEY = "harn-gitlab-connector.state"
+const GITLAB_STATE_KEY = "harn-gitlab-connector.state"
 
-let GITLAB_API_BASE_URL = "https://gitlab.com/api/v4"
+const GITLAB_API_BASE_URL = "https://gitlab.com/api/v4"
 
-let GITLAB_GRAPHQL_PATH = "/api/graphql"
+const GITLAB_GRAPHQL_PATH = "/api/graphql"
 
-let GITLAB_OAUTH_AUTHORIZE_PATH = "/oauth/authorize"
+const GITLAB_OAUTH_AUTHORIZE_PATH = "/oauth/authorize"
 
-let GITLAB_OAUTH_TOKEN_PATH = "/oauth/token"
+const GITLAB_OAUTH_TOKEN_PATH = "/oauth/token"
 
-let MAX_BODY_BYTES = 1048576
+const MAX_BODY_BYTES = 1048576
 
-let GITLAB_SUPPORTED_EVENTS = ["push", "tag_push", "merge_request", "note", "issue", "pipeline"]
+const GITLAB_SUPPORTED_EVENTS = ["push", "tag_push", "merge_request", "note", "issue", "pipeline"]
 
-let GITLAB_OUTBOUND_METHODS = [
+const GITLAB_OUTBOUND_METHODS = [
   "notes.create_merge_request_note",
   "notes.create_issue_note",
   "merge_requests.update",
@@ -79,18 +79,18 @@ pub fn payload_schema() {
 
 /** Initialize connector state with orchestrator context. */
 pub fn init(ctx = nil) {
-  let next = __state() + {initialized: true, ctx: ctx ?? {}}
+  const next = __state() + {initialized: true, ctx: ctx ?? {}}
   __set_state(next)
   return next
 }
 
 /** Activate webhook bindings and reject duplicate configured paths. */
 pub fn activate(bindings = []) {
-  var by_id = {}
-  var seen_paths = {}
+  let by_id = {}
+  let seen_paths = {}
   for binding in bindings ?? [] {
-    let binding_id = binding?.binding_id ?? binding?.id ?? ("binding-" + to_string(len(by_id.keys())))
-    let path = binding?.path ?? binding?.match?.path
+    const binding_id = binding?.binding_id ?? binding?.id ?? ("binding-" + to_string(len(by_id.keys())))
+    const path = binding?.path ?? binding?.match?.path
     if path != nil && path != "" {
       if seen_paths.get(path) {
         return __err("activation", "gitlab connector path `" + path + "` is configured by multiple bindings")
@@ -99,7 +99,7 @@ pub fn activate(bindings = []) {
     }
     by_id[binding_id] = binding + {binding_id: binding_id}
   }
-  let next = __state() + {bindings: by_id, active: true}
+  const next = __state() + {bindings: by_id, active: true}
   __set_state(next)
   return {provider: GITLAB_PROVIDER_ID, kind: "webhook", bindings: len(by_id.keys())}
 }
@@ -120,31 +120,31 @@ pub fn shutdown() {
  * `signature_status: "unsigned"` per GitLab's upstream model.
  */
 pub fn normalize_inbound(raw) {
-  let body_text = raw?.body_text ?? raw?.body ?? ""
+  const body_text = raw?.body_text ?? raw?.body ?? ""
   if len(body_text) > MAX_BODY_BYTES {
     return __reject(413, "payload_too_large", "gitlab webhook body exceeds 1 MiB cap")
   }
-  let headers = raw?.headers ?? {}
-  let verified = __verify_gitlab_token(raw, headers)
+  const headers = raw?.headers ?? {}
+  const verified = __verify_gitlab_token(raw, headers)
   if is_err(verified) {
     return __reject_err(unwrap_err(verified))
   }
-  let signature_status = unwrap(verified)
-  let parsed = try {
+  const signature_status = unwrap(verified)
+  const parsed = try {
     json_parse(body_text)
   }
   if is_err(parsed) {
     return __reject(400, "invalid_json", "gitlab payload body is not valid JSON")
   }
-  let payload = unwrap(parsed)
-  let object_kind = payload?.object_kind ?? __event_kind_from_header(headers)
+  const payload = unwrap(parsed)
+  const object_kind = payload?.object_kind ?? __event_kind_from_header(headers)
   if object_kind == nil || object_kind == "" {
     return __reject(400, "missing_event", "missing GitLab object_kind and X-Gitlab-Event header")
   }
   if !contains(GITLAB_SUPPORTED_EVENTS, object_kind) {
     return __reject(400, "unsupported_event", "unsupported GitLab event type `" + to_string(object_kind) + "`")
   }
-  let event = __build_event(object_kind, payload, raw, headers, signature_status)
+  const event = __build_event(object_kind, payload, raw, headers, signature_status)
   return {type: "event", event: event}
 }
 
@@ -163,11 +163,11 @@ pub fn call(method, args = {}) {
   if method == "oauth.refresh_token" {
     return __oauth_refresh_token(args ?? {})
   }
-  let config = __outbound_config(args ?? {})
+  const config = __outbound_config(args ?? {})
   if is_err(config) {
     return config
   }
-  let cfg = unwrap(config)
+  const cfg = unwrap(config)
   if method == "notes.create_merge_request_note" {
     return __gitlab_json(
       "POST",
@@ -284,9 +284,9 @@ fn __reject(status, code, message) {
 }
 
 fn __reject_err(err) {
-  let code = err?.code ?? "rejected"
-  let message = err?.message ?? "request rejected"
-  let status = if code == "invalid_token" || code == "missing_token" || code == "missing_secret" {
+  const code = err?.code ?? "rejected"
+  const message = err?.message ?? "request rejected"
+  const status = if code == "invalid_token" || code == "missing_token" || code == "missing_secret" {
     401
   } else {
     400
@@ -295,7 +295,7 @@ fn __reject_err(err) {
 }
 
 fn __header(headers, name) {
-  let wanted = lowercase(name)
+  const wanted = lowercase(name)
   for entry in (headers ?? {}).entries() {
     if lowercase(trim(to_string(entry.key))) == wanted {
       return trim(to_string(entry.value))
@@ -305,11 +305,11 @@ fn __header(headers, name) {
 }
 
 fn __event_kind_from_header(headers) {
-  let raw_header = __header(headers, "x-gitlab-event")
+  const raw_header = __header(headers, "x-gitlab-event")
   if raw_header == nil || raw_header == "" {
     return nil
   }
-  let without_hook = if ends_with(raw_header, " Hook") {
+  const without_hook = if ends_with(raw_header, " Hook") {
     raw_header[0:len(raw_header) - 5]
   } else {
     raw_header
@@ -318,28 +318,28 @@ fn __event_kind_from_header(headers) {
 }
 
 fn __signing_secret(raw) {
-  let state = __state()
-  let ctx_secret = state?.ctx?.signing_secret ?? state?.ctx?.secrets?.signing_secret
+  const state = __state()
+  const ctx_secret = state?.ctx?.signing_secret ?? state?.ctx?.secrets?.signing_secret
   if ctx_secret != nil && trim(to_string(ctx_secret)) != "" {
     return to_string(ctx_secret)
   }
-  let bindings = state?.bindings ?? {}
-  let binding_id = raw?.metadata?.binding_id ?? raw?.binding_id
+  const bindings = state?.bindings ?? {}
+  const binding_id = raw?.metadata?.binding_id ?? raw?.binding_id
   if binding_id != nil {
-    let binding = bindings.get(binding_id)
-    let binding_secret = binding?.signing_secret ?? binding?.secrets?.signing_secret
+    const binding = bindings.get(binding_id)
+    const binding_secret = binding?.signing_secret ?? binding?.secrets?.signing_secret
       ?? binding?.config?.signing_secret
     if binding_secret != nil && trim(to_string(binding_secret)) != "" {
       return to_string(binding_secret)
     }
   }
-  let secret_id = __signing_secret_id(raw)
+  const secret_id = __signing_secret_id(raw)
   if secret_id != nil {
-    let resolved = try {
+    const resolved = try {
       secret_get(secret_id)
     }
     if !is_err(resolved) {
-      let value = to_string(unwrap(resolved))
+      const value = to_string(unwrap(resolved))
       if value != "" {
         return value
       }
@@ -349,16 +349,16 @@ fn __signing_secret(raw) {
 }
 
 fn __signing_secret_id(raw) {
-  let metadata = raw?.metadata ?? {}
-  let id = metadata?.secret_ids?.signing_secret ?? metadata?.config?.secret_ids?.signing_secret
+  const metadata = raw?.metadata ?? {}
+  const id = metadata?.secret_ids?.signing_secret ?? metadata?.config?.secret_ids?.signing_secret
   if id != nil && trim(to_string(id)) != "" {
     return to_string(id)
   }
-  let bindings = __state()?.bindings ?? {}
-  let binding_id = metadata?.binding_id ?? raw?.binding_id
+  const bindings = __state()?.bindings ?? {}
+  const binding_id = metadata?.binding_id ?? raw?.binding_id
   if binding_id != nil {
-    let binding = bindings.get(binding_id)
-    let bid = binding?.signing_secret_id ?? binding?.secrets?.signing_secret_id
+    const binding = bindings.get(binding_id)
+    const bid = binding?.signing_secret_id ?? binding?.secrets?.signing_secret_id
       ?? binding?.config?.secret_ids?.signing_secret
     if bid != nil && trim(to_string(bid)) != "" {
       return to_string(bid)
@@ -368,12 +368,12 @@ fn __signing_secret_id(raw) {
 }
 
 fn __binding_allows_unsigned(raw) {
-  let bindings = __state()?.bindings ?? {}
-  let binding_id = raw?.metadata?.binding_id ?? raw?.binding_id
+  const bindings = __state()?.bindings ?? {}
+  const binding_id = raw?.metadata?.binding_id ?? raw?.binding_id
   if binding_id == nil {
     return false
   }
-  let binding = bindings.get(binding_id)
+  const binding = bindings.get(binding_id)
   if binding == nil {
     return false
   }
@@ -381,8 +381,8 @@ fn __binding_allows_unsigned(raw) {
 }
 
 fn __verify_gitlab_token(raw, headers) {
-  let secret = __signing_secret(raw)
-  let provided = __header(headers, "x-gitlab-token")
+  const secret = __signing_secret(raw)
+  const provided = __header(headers, "x-gitlab-token")
   if secret == nil || trim(to_string(secret)) == "" {
     if __binding_allows_unsigned(raw) {
       return Ok("unsigned")
@@ -403,18 +403,18 @@ fn __verify_gitlab_token(raw, headers) {
 
 @complexity(allow)
 fn __build_event(object_kind, payload, raw, headers, signature_status) {
-  let project = __project(payload)
-  let actor = __actor(payload)
-  let action = __action(object_kind, payload)
-  let kind = if action == nil || action == "" {
+  const project = __project(payload)
+  const actor = __actor(payload)
+  const action = __action(object_kind, payload)
+  const kind = if action == nil || action == "" {
     object_kind
   } else {
     object_kind + "." + action
   }
-  let resource = __resource(object_kind, payload)
-  let dedupe_key = __dedupe_key(object_kind, payload, project, raw, headers)
-  let occurred_at = __occurred_at(object_kind, payload, raw)
-  let normalized_payload = {
+  const resource = __resource(object_kind, payload)
+  const dedupe_key = __dedupe_key(object_kind, payload, project, raw, headers)
+  const occurred_at = __occurred_at(object_kind, payload, raw)
+  const normalized_payload = {
     object_kind: object_kind,
     event_name: payload?.event_name,
     action: action,
@@ -440,7 +440,7 @@ fn __build_event(object_kind, payload, raw, headers, signature_status) {
 }
 
 fn __project(payload) {
-  let project = payload?.project ?? {}
+  const project = payload?.project ?? {}
   return {
     id: project?.id ?? payload?.project_id,
     name: project?.name,
@@ -451,7 +451,7 @@ fn __project(payload) {
 }
 
 fn __actor(payload) {
-  let user = payload?.user
+  const user = payload?.user
   if user != nil {
     return {
       id: user?.id,
@@ -495,8 +495,8 @@ fn __resource(object_kind, payload) {
     }
   }
   if object_kind == "merge_request" {
-    let attrs = payload?.object_attributes ?? {}
-    let merge = __merge_state(attrs)
+    const attrs = payload?.object_attributes ?? {}
+    const merge = __merge_state(attrs)
     return {
       detailed_merge_status: attrs?.detailed_merge_status,
       draft: attrs?.draft ?? attrs?.work_in_progress,
@@ -513,11 +513,11 @@ fn __resource(object_kind, payload) {
     }
   }
   if object_kind == "issue" {
-    let attrs = payload?.object_attributes ?? {}
+    const attrs = payload?.object_attributes ?? {}
     return {id: attrs?.id, iid: attrs?.iid, title: attrs?.title, state: attrs?.state, url: attrs?.url}
   }
   if object_kind == "note" {
-    let attrs = payload?.object_attributes ?? {}
+    const attrs = payload?.object_attributes ?? {}
     return {
       id: attrs?.id,
       noteable_type: attrs?.noteable_type,
@@ -525,7 +525,7 @@ fn __resource(object_kind, payload) {
       url: attrs?.url,
     }
   }
-  let attrs = payload?.object_attributes ?? {}
+  const attrs = payload?.object_attributes ?? {}
   return {
     id: attrs?.id,
     iid: attrs?.iid,
@@ -544,11 +544,11 @@ fn __resource(object_kind, payload) {
  * `merge_status == "cannot_be_merged"`.
  */
 fn __merge_state(attrs) {
-  let detailed = attrs?.detailed_merge_status
-  let merge_status = attrs?.merge_status
-  let is_conflict = lowercase(to_string(detailed ?? "")) == "conflict"
+  const detailed = attrs?.detailed_merge_status
+  const merge_status = attrs?.merge_status
+  const is_conflict = lowercase(to_string(detailed ?? "")) == "conflict"
     || lowercase(to_string(merge_status ?? "")) == "cannot_be_merged"
-  let merge_state = detailed ?? merge_status ?? "unknown"
+  const merge_state = detailed ?? merge_status ?? "unknown"
   return {is_conflict: is_conflict, merge_state: to_string(merge_state)}
 }
 
@@ -562,14 +562,14 @@ fn __mention_block(object_kind, payload, actor) {
   if object_kind != "note" {
     return nil
   }
-  let attrs = payload?.object_attributes ?? {}
-  let body = to_string(attrs?.note ?? "")
-  let candidates = __extract_mentions(body)
+  const attrs = payload?.object_attributes ?? {}
+  const body = to_string(attrs?.note ?? "")
+  const candidates = __extract_mentions(body)
   if len(candidates) == 0 {
     return nil
   }
-  let noteable_type = lowercase(to_string(attrs?.noteable_type ?? ""))
-  let target_kind = if noteable_type == "mergerequest" {
+  const noteable_type = lowercase(to_string(attrs?.noteable_type ?? ""))
+  const target_kind = if noteable_type == "mergerequest" {
     "merge_request"
   } else if noteable_type == "issue" {
     "issue"
@@ -578,7 +578,7 @@ fn __mention_block(object_kind, payload, actor) {
   } else {
     "unknown"
   }
-  let target_id = payload?.merge_request?.iid ?? payload?.issue?.iid
+  const target_id = payload?.merge_request?.iid ?? payload?.issue?.iid
     ?? attrs?.noteable_id
     ?? attrs?.noteable_iid
   return {
@@ -596,22 +596,22 @@ fn __mention_block(object_kind, payload, actor) {
  * yields one candidate `{command, handle, rest}`. Pure string parsing.
  */
 fn __extract_mentions(body) {
-  var candidates = []
+  let candidates = []
   for line in split(to_string(body), "\n") {
-    let tokens = __whitespace_tokens(line)
+    const tokens = __whitespace_tokens(line)
     if len(tokens) < 2 {
       continue
     }
-    let first = tokens[0]
+    const first = tokens[0]
     if !starts_with(first, "@") || len(first) < 2 {
       continue
     }
-    let handle = first[1:len(first)]
+    const handle = first[1:len(first)]
     if handle == "" {
       continue
     }
-    let command = tokens[1]
-    let rest = if len(tokens) > 2 {
+    const command = tokens[1]
+    const rest = if len(tokens) > 2 {
       join(tokens[2:len(tokens)], " ")
     } else {
       ""
@@ -623,8 +623,8 @@ fn __extract_mentions(body) {
 
 /** Split text on ASCII whitespace runs, dropping empty tokens. */
 fn __whitespace_tokens(text) {
-  var tokens = []
-  var current = ""
+  let tokens = []
+  let current = ""
   for ch in split(to_string(text), "") {
     if ch == " " || ch == "\t" || ch == "\r" {
       if current != "" {
@@ -643,18 +643,18 @@ fn __whitespace_tokens(text) {
 
 @complexity(allow)
 fn __dedupe_key(object_kind, payload, project, raw, headers) {
-  let uuid = __header(headers, "x-gitlab-event-uuid")
+  const uuid = __header(headers, "x-gitlab-event-uuid")
   if uuid != nil && uuid != "" {
     return "gitlab:" + object_kind + ":" + uuid
   }
-  let project_id = to_string(project?.id ?? "unknown")
+  const project_id = to_string(project?.id ?? "unknown")
   if object_kind == "push" || object_kind == "tag_push" {
     return "gitlab:" + object_kind + ":" + project_id + ":" + to_string(payload?.ref ?? "")
       + ":"
       + to_string(payload?.after ?? "")
   }
   if object_kind == "merge_request" {
-    let attrs = payload?.object_attributes ?? {}
+    const attrs = payload?.object_attributes ?? {}
     return "gitlab:merge_request:" + project_id + ":" + to_string(attrs?.iid ?? "")
       + ":"
       + to_string(attrs?.action ?? "update")
@@ -662,16 +662,16 @@ fn __dedupe_key(object_kind, payload, project, raw, headers) {
       + to_string(attrs?.updated_at ?? "")
   }
   if object_kind == "issue" {
-    let attrs = payload?.object_attributes ?? {}
+    const attrs = payload?.object_attributes ?? {}
     return "gitlab:issue:" + project_id + ":" + to_string(attrs?.iid ?? "")
       + ":"
       + to_string(attrs?.updated_at ?? "")
   }
   if object_kind == "note" {
-    let attrs = payload?.object_attributes ?? {}
+    const attrs = payload?.object_attributes ?? {}
     return "gitlab:note:" + project_id + ":" + to_string(attrs?.id ?? "")
   }
-  let attrs = payload?.object_attributes ?? {}
+  const attrs = payload?.object_attributes ?? {}
   return "gitlab:pipeline:" + project_id + ":" + to_string(attrs?.id ?? "")
     + ":"
     + to_string(attrs?.status ?? "")
@@ -682,13 +682,13 @@ fn __occurred_at(object_kind, payload, raw) {
     return raw.occurred_at
   }
   if object_kind == "push" || object_kind == "tag_push" {
-    let commits = payload?.commits ?? []
+    const commits = payload?.commits ?? []
     if len(commits) > 0 {
       return commits[0]?.timestamp
     }
     return nil
   }
-  let attrs = payload?.object_attributes
+  const attrs = payload?.object_attributes
   if attrs != nil {
     return attrs?.updated_at ?? attrs?.created_at ?? attrs?.finished_at
   }
@@ -697,12 +697,12 @@ fn __occurred_at(object_kind, payload, raw) {
 
 @complexity(allow)
 fn __outbound_config(args) {
-  let api_base_url = args?.api_base_url ?? harness.env.get_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
-  let base_check = __validate_api_base_url(api_base_url)
+  const api_base_url = args?.api_base_url ?? harness.env.get_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
+  const base_check = __validate_api_base_url(api_base_url)
   if is_err(base_check) {
     return base_check
   }
-  let access_token = args?.access_token ?? args?.personal_access_token ?? args?.project_access_token ?? args?.token
+  const access_token = args?.access_token ?? args?.personal_access_token ?? args?.project_access_token ?? args?.token
     ?? args?.bindings?.access_token
     ?? args?.secrets?.access_token
     ?? harness.env.get("GITLAB_ACCESS_TOKEN")
@@ -729,7 +729,7 @@ fn __config_keys() {
 }
 
 fn __body_without(args, keys) {
-  let body = (args ?? {}) + {}
+  const body = (args ?? {}) + {}
   for key in keys {
     body.remove(key)
   }
@@ -737,8 +737,8 @@ fn __body_without(args, keys) {
 }
 
 fn __gitlab_api_url(api_base_url, path) {
-  let base = trim(to_string(api_base_url))
-  let prefix = if ends_with(base, "/") {
+  const base = trim(to_string(api_base_url))
+  const prefix = if ends_with(base, "/") {
     base[0:len(base) - 1]
   } else {
     base
@@ -754,22 +754,22 @@ fn __validate_api_base_url(api_base_url) {
   if api_base_url == nil || trim(to_string(api_base_url)) == "" {
     return __err("invalid_api_base_url", "api_base_url is required")
   }
-  let url = trim(to_string(api_base_url))
+  const url = trim(to_string(api_base_url))
   if !starts_with(lowercase(url), "https://") {
     return __err("invalid_api_base_url", "api_base_url must use https:// scheme")
   }
-  let after_scheme = url[8:len(url)]
-  let slash_idx = __index_of(after_scheme, "/")
-  let host_port = if slash_idx >= 0 {
+  const after_scheme = url[8:len(url)]
+  const slash_idx = __index_of(after_scheme, "/")
+  const host_port = if slash_idx >= 0 {
     after_scheme[0:slash_idx]
   } else {
     after_scheme
   }
-  let host = __strip_port(host_port)
+  const host = __strip_port(host_port)
   if host == "" {
     return __err("invalid_api_base_url", "api_base_url is missing a host")
   }
-  let host_lc = lowercase(host)
+  const host_lc = lowercase(host)
   if __is_disallowed_host(host_lc) {
     return __err(
       "invalid_api_base_url",
@@ -782,13 +782,13 @@ fn __validate_api_base_url(api_base_url) {
 
 fn __strip_port(host_port) {
   if starts_with(host_port, "[") {
-    let close = __index_of(host_port, "]")
+    const close = __index_of(host_port, "]")
     if close >= 0 {
       return host_port[1:close]
     }
     return host_port
   }
-  let colon = __index_of(host_port, ":")
+  const colon = __index_of(host_port, ":")
   if colon >= 0 {
     return host_port[0:colon]
   }
@@ -796,12 +796,12 @@ fn __strip_port(host_port) {
 }
 
 fn __index_of(text, needle) {
-  let n = len(text)
-  let m = len(needle)
+  const n = len(text)
+  const m = len(needle)
   if m == 0 {
     return 0
   }
-  var i = 0
+  let i = 0
   while i + m <= n {
     if text[i:i + m] == needle {
       return i
@@ -829,15 +829,15 @@ fn __is_disallowed_host(host_lc) {
     return true
   }
   if starts_with(host_lc, "172.") {
-    let rest = host_lc[4:len(host_lc)]
-    let dot = __index_of(rest, ".")
+    const rest = host_lc[4:len(host_lc)]
+    const dot = __index_of(rest, ".")
     if dot > 0 {
-      let octet_str = rest[0:dot]
-      let parsed = try {
+      const octet_str = rest[0:dot]
+      const parsed = try {
         to_int(octet_str)
       }
       if !is_err(parsed) {
-        let octet = unwrap(parsed)
+        const octet = unwrap(parsed)
         if octet >= 16 && octet <= 31 {
           return true
         }
@@ -848,13 +848,13 @@ fn __is_disallowed_host(host_lc) {
 }
 
 fn __graphql_url(api_base_url) {
-  let base = trim(to_string(api_base_url))
-  let trimmed = if ends_with(base, "/") {
+  const base = trim(to_string(api_base_url))
+  const trimmed = if ends_with(base, "/") {
     base[0:len(base) - 1]
   } else {
     base
   }
-  let host_only = if ends_with(trimmed, "/api/v4") {
+  const host_only = if ends_with(trimmed, "/api/v4") {
     trimmed[0:len(trimmed) - 7]
   } else {
     trimmed
@@ -863,8 +863,8 @@ fn __graphql_url(api_base_url) {
 }
 
 fn __oauth_host(api_base_url) {
-  let base = trim(to_string(api_base_url))
-  let trimmed = if ends_with(base, "/") {
+  const base = trim(to_string(api_base_url))
+  const trimmed = if ends_with(base, "/") {
     base[0:len(base) - 1]
   } else {
     base
@@ -883,7 +883,7 @@ fn __project_ref(args) {
 }
 
 fn __pagination_query(args) {
-  var parts = []
+  let parts = []
   if args?.per_page != nil {
     parts = parts + ["per_page=" + url_encode(to_string(args.per_page))]
   }
@@ -905,7 +905,7 @@ fn __ref_query(args) {
 
 @complexity(allow)
 fn __gitlab_json(method, url, body, cfg) {
-  var options = {
+  let options = {
     headers: {Accept: "application/json", Authorization: "Bearer " + cfg.access_token},
     retry: {max: 0, backoff_ms: 0},
   }
@@ -913,16 +913,16 @@ fn __gitlab_json(method, url, body, cfg) {
     options["body"] = json_stringify(body)
     options.headers["Content-Type"] = "application/json"
   }
-  var retried_rate_limit = false
+  let retried_rate_limit = false
   while true {
-    let response_result = try {
+    const response_result = try {
       harness.net.request(method, url, options)
     }
     if is_err(response_result) {
       return __err("transport", to_string(unwrap_err(response_result)))
     }
-    let response = unwrap(response_result)
-    let limited = __maybe_wait_for_rate_limit(response)
+    const response = unwrap(response_result)
+    const limited = __maybe_wait_for_rate_limit(response)
     if is_err(limited) {
       return limited
     }
@@ -931,7 +931,7 @@ fn __gitlab_json(method, url, body, cfg) {
       continue
     }
     if response.status < 200 || response.status >= 300 {
-      let code = if response.status == 429 || response.status == 503 {
+      const code = if response.status == 429 || response.status == 503 {
         "rate_limited"
       } else if response.status == 401 || response.status == 403 {
         "unauthorized"
@@ -946,7 +946,7 @@ fn __gitlab_json(method, url, body, cfg) {
     if trim(response.body ?? "") == "" {
       return {status: response.status, headers: response.headers, body: ""}
     }
-    let parsed = try {
+    const parsed = try {
       json_parse(response.body)
     }
     if is_err(parsed) {
@@ -957,21 +957,21 @@ fn __gitlab_json(method, url, body, cfg) {
 }
 
 fn __maybe_wait_for_rate_limit(response) {
-  let remaining = __header(response.headers ?? {}, "ratelimit-remaining")
+  const remaining = __header(response.headers ?? {}, "ratelimit-remaining")
   if remaining == nil || trim(to_string(remaining)) != "0" {
     return Ok(false)
   }
-  let reset = __header(response.headers ?? {}, "ratelimit-reset")
+  const reset = __header(response.headers ?? {}, "ratelimit-reset")
   if reset == nil || trim(to_string(reset)) == "" {
     return Ok(true)
   }
-  let parsed_reset = try {
+  const parsed_reset = try {
     to_int(reset)
   }
   if is_err(parsed_reset) {
     return Ok(true)
   }
-  let wait_seconds = unwrap(parsed_reset) - to_int(harness.clock.timestamp())
+  const wait_seconds = unwrap(parsed_reset) - to_int(harness.clock.timestamp())
   if wait_seconds > 60 {
     return __err("rate_limited", "gitlab API rate limit reset is more than 60 seconds away")
   }
@@ -983,19 +983,19 @@ fn __maybe_wait_for_rate_limit(response) {
 
 @complexity(allow)
 fn __oauth_authorize_url(args) {
-  let api_base_url = args?.api_base_url ?? harness.env.get_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
-  let base_check = __validate_api_base_url(api_base_url)
+  const api_base_url = args?.api_base_url ?? harness.env.get_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
+  const base_check = __validate_api_base_url(api_base_url)
   if is_err(base_check) {
     return base_check
   }
-  let host = __oauth_host(api_base_url)
+  const host = __oauth_host(api_base_url)
   if args?.client_id == nil || trim(to_string(args.client_id)) == "" {
     return __err("missing_client_id", "oauth.authorize_url requires client_id")
   }
   if args?.redirect_uri == nil || trim(to_string(args.redirect_uri)) == "" {
     return __err("missing_redirect_uri", "oauth.authorize_url requires redirect_uri")
   }
-  var parts = [
+  let parts = [
     "client_id=" + url_encode(to_string(args.client_id)),
     "redirect_uri=" + url_encode(to_string(args.redirect_uri)),
     "response_type=code",
@@ -1025,7 +1025,7 @@ fn __oauth_exchange_code(args) {
   if args?.redirect_uri == nil || trim(to_string(args.redirect_uri)) == "" {
     return __err("missing_redirect_uri", "oauth.exchange_code requires redirect_uri")
   }
-  var body = {
+  let body = {
     client_id: to_string(args.client_id),
     code: to_string(args.code),
     grant_type: "authorization_code",
@@ -1047,7 +1047,7 @@ fn __oauth_refresh_token(args) {
   if args?.refresh_token == nil || trim(to_string(args.refresh_token)) == "" {
     return __err("missing_refresh_token", "oauth.refresh_token requires refresh_token")
   }
-  var body = {
+  let body = {
     client_id: to_string(args.client_id),
     refresh_token: to_string(args.refresh_token),
     grant_type: "refresh_token",
@@ -1059,13 +1059,13 @@ fn __oauth_refresh_token(args) {
 }
 
 fn __oauth_token_request(args, body) {
-  let api_base_url = args?.api_base_url ?? harness.env.get_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
-  let base_check = __validate_api_base_url(api_base_url)
+  const api_base_url = args?.api_base_url ?? harness.env.get_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
+  const base_check = __validate_api_base_url(api_base_url)
   if is_err(base_check) {
     return base_check
   }
-  let host = __oauth_host(api_base_url)
-  let response_result = try {
+  const host = __oauth_host(api_base_url)
+  const response_result = try {
     harness.net
       .request(
       "POST",
@@ -1080,14 +1080,14 @@ fn __oauth_token_request(args, body) {
   if is_err(response_result) {
     return __err("transport", to_string(unwrap_err(response_result)))
   }
-  let response = unwrap(response_result)
+  const response = unwrap(response_result)
   if response.status < 200 || response.status >= 300 {
     return __err(
       "oauth_error",
       "gitlab oauth request failed with status " + to_string(response.status) + ": " + response.body,
     )
   }
-  let parsed = try {
+  const parsed = try {
     json_parse(response.body)
   }
   if is_err(parsed) {
