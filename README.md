@@ -5,14 +5,8 @@ webhook tokens, normalizes GitLab event payloads to the canonical
 tagged `NormalizeResult` envelope, and dispatches outbound REST/GraphQL
 calls with optional OAuth2 helpers.
 
-> **Status: pre-alpha** — actively developed in tandem with
-> [burin-labs/harn](https://github.com/burin-labs/harn). See the
-> [Pure-Harn Connectors Pivot epic #350](https://github.com/burin-labs/harn/issues/350)
-> and the connector interface contract in
-> [#346](https://github.com/burin-labs/harn/issues/346).
-
-This is an **inbound + outbound** connector implementing the Harn
-Connector interface. Compatible with GitLab.com (SaaS), GitLab
+This is a first-party **inbound + outbound** connector package implementing
+Harn Connector Contract v1. It is compatible with GitLab.com (SaaS), GitLab
 Self-Managed, and GitLab Dedicated (17.x+).
 
 ## Install
