@@ -9,7 +9,7 @@ Shared Harn connector authoring rules live in the canonical guide:
 Keep this file limited to provider-specific notes and local hazards. Add shared connector guidance
 to the Harn guide first.
 
-## Provider Notes
+## Provider notes
 
 - `X-Gitlab-Token` is a plain shared secret, not an HMAC signature. Compare it with constant-time
   equality.
