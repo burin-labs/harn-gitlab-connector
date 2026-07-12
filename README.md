@@ -17,13 +17,14 @@ Self-Managed, and GitLab Dedicated (17.x+).
 
 ## Install
 
-Via Harn package management ([harn#345](https://github.com/burin-labs/harn/issues/345)):
+No release tag is published yet. Use the `main` branch for package-manager
+smoke tests:
 
 ```sh
-harn add github.com/burin-labs/harn-gitlab-connector@v0.1.0
+harn add github.com/burin-labs/harn-gitlab-connector@main
 ```
 
-Until a version is tagged, depend on this repo via a path import:
+Use a path checkout for local multi-repo development:
 
 ```toml
 [dependencies]
