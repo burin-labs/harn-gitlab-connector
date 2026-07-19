@@ -15,7 +15,9 @@ pipeline default() {
   assert_eq(clean_resource.detailed_merge_status, "mergeable", "clean MR detailed status")
   // A conflicting MR (detailed_merge_status=conflict, merge_status=cannot_be_merged)
   // surfaces is_conflict=true.
-  const conflict = gitlab_normalize(fixture_raw("merge_request_conflict", token, "Merge Request Hook"))
+  const conflict = gitlab_normalize(
+    fixture_raw("merge_request_conflict", token, "Merge Request Hook"),
+  )
   assert_eq(conflict.type, "event", "conflict MR envelope")
   const conflict_resource = conflict.event.payload.resource
   assert_eq(conflict_resource.is_conflict, true, "conflict MR is a conflict")

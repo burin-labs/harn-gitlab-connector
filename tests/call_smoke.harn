@@ -13,7 +13,13 @@ pipeline default() {
   )
   const note = call(
     "notes.create_merge_request_note",
-    {api_base_url: base, access_token: token, project_id: 101, merge_request_iid: 42, body: "hello"},
+    {
+      api_base_url: base,
+      access_token: token,
+      project_id: 101,
+      merge_request_iid: 42,
+      body: "hello",
+    },
   )
   assert_eq(note.id, 501, "note id")
   http_mock(
@@ -107,7 +113,10 @@ pipeline default() {
         {
           status: 429,
           body: "{\"message\":\"rate limited\"}",
-          headers: {"ratelimit-remaining": "0", "ratelimit-reset": to_string(to_int(harness.clock.timestamp()) - 1)},
+          headers: {
+            "ratelimit-remaining": "0",
+            "ratelimit-reset": to_string(to_int(harness.clock.timestamp()) - 1),
+          },
         },
         {status: 200, body: "{\"file_path\":\"README.md\"}"},
       ],
@@ -125,7 +134,10 @@ pipeline default() {
     {
       status: 429,
       body: "{\"message\":\"rate limited\"}",
-      headers: {"ratelimit-remaining": "0", "ratelimit-reset": to_string(to_int(harness.clock.timestamp()) + 120)},
+      headers: {
+        "ratelimit-remaining": "0",
+        "ratelimit-reset": to_string(to_int(harness.clock.timestamp()) + 120),
+      },
     },
   )
   const capped = call(
@@ -144,7 +156,10 @@ pipeline default() {
       state: "xyz",
     },
   )
-  assert(contains(auth_url.authorize_url, "client_id=client-abc"), "authorize url includes client_id")
+  assert(
+    contains(auth_url.authorize_url, "client_id=client-abc"),
+    "authorize url includes client_id",
+  )
   assert(
     contains(auth_url.authorize_url, "response_type=code"),
     "authorize url includes response_type",
@@ -176,7 +191,12 @@ pipeline default() {
   )
   const refreshed = call(
     "oauth.refresh_token",
-    {api_base_url: base, client_id: "client-abc", client_secret: "secret-xyz", refresh_token: "def"},
+    {
+      api_base_url: base,
+      client_id: "client-abc",
+      client_secret: "secret-xyz",
+      refresh_token: "def",
+    },
   )
   assert_eq(refreshed.access_token, "new", "oauth refresh access_token")
   const missing_token = call(

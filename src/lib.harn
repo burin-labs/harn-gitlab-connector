@@ -89,11 +89,15 @@ pub fn activate(bindings = []) {
   let by_id = {}
   let seen_paths = {}
   for binding in bindings ?? [] {
-    const binding_id = binding?.binding_id ?? binding?.id ?? ("binding-" + to_string(len(by_id.keys())))
+    const binding_id = binding?.binding_id ?? binding?.id
+      ?? ("binding-" + to_string(len(by_id.keys())))
     const path = binding?.path ?? binding?.match?.path
     if path != nil && path != "" {
       if seen_paths.get(path) {
-        return __err("activation", "gitlab connector path `" + path + "` is configured by multiple bindings")
+        return __err(
+          "activation",
+          "gitlab connector path `" + path + "` is configured by multiple bindings",
+        )
       }
       seen_paths[path] = true
     }
@@ -142,7 +146,11 @@ pub fn normalize_inbound(raw) {
     return __reject(400, "missing_event", "missing GitLab object_kind and X-Gitlab-Event header")
   }
   if !contains(GITLAB_SUPPORTED_EVENTS, object_kind) {
-    return __reject(400, "unsupported_event", "unsupported GitLab event type `" + to_string(object_kind) + "`")
+    return __reject(
+      400,
+      "unsupported_event",
+      "unsupported GitLab event type `" + to_string(object_kind) + "`",
+    )
   }
   const event = __build_event(object_kind, payload, raw, headers, signature_status)
   return {type: "event", event: event}
@@ -152,7 +160,10 @@ pub fn normalize_inbound(raw) {
 /** Dispatch a supported GitLab REST / GraphQL / OAuth2 method. */
 pub fn call(method, args = {}) {
   if !contains(GITLAB_OUTBOUND_METHODS, method) {
-    return __err("method_not_found", "gitlab connector does not implement outbound method `" + method + "`")
+    return __err(
+      "method_not_found",
+      "gitlab connector does not implement outbound method `" + method + "`",
+    )
   }
   if method == "oauth.authorize_url" {
     return __oauth_authorize_url(args ?? {})
@@ -244,7 +255,9 @@ pub fn call(method, args = {}) {
       __gitlab_api_url(
         cfg.api_base_url,
         "/projects/" + __project_ref(args) + "/repository/files/"
-          + url_encode(to_string(args.path ?? ""))
+          + url_encode(
+          to_string(args.path ?? ""),
+        )
           + __ref_query(args),
       ),
       nil,
@@ -328,7 +341,8 @@ fn __signing_secret(raw) {
   if binding_id != nil {
     const binding = bindings.get(binding_id)
     const binding_secret = binding?.signing_secret ?? binding?.secrets?.signing_secret
-      ?? binding?.config?.signing_secret
+      ?? binding
+      ?.config?.signing_secret
     if binding_secret != nil && trim(to_string(binding_secret)) != "" {
       return to_string(binding_secret)
     }
@@ -359,7 +373,8 @@ fn __signing_secret_id(raw) {
   if binding_id != nil {
     const binding = bindings.get(binding_id)
     const bid = binding?.signing_secret_id ?? binding?.secrets?.signing_secret_id
-      ?? binding?.config?.secret_ids?.signing_secret
+      ?? binding?.config
+      ?.secret_ids?.signing_secret
     if bid != nil && trim(to_string(bid)) != "" {
       return to_string(bid)
     }
@@ -393,7 +408,10 @@ fn __verify_gitlab_token(raw, headers) {
     )
   }
   if provided == nil || provided == "" {
-    return __err("missing_token", "x-gitlab-token header missing but a signing_secret is configured")
+    return __err(
+      "missing_token",
+      "x-gitlab-token header missing but a signing_secret is configured",
+    )
   }
   if !constant_time_eq(to_string(secret), to_string(provided)) {
     return __err("invalid_token", "x-gitlab-token did not match the configured signing_secret")
@@ -514,7 +532,13 @@ fn __resource(object_kind, payload) {
   }
   if object_kind == "issue" {
     const attrs = payload?.object_attributes ?? {}
-    return {id: attrs?.id, iid: attrs?.iid, title: attrs?.title, state: attrs?.state, url: attrs?.url}
+    return {
+      id: attrs?.id,
+      iid: attrs?.iid,
+      title: attrs?.title,
+      state: attrs?.state,
+      url: attrs?.url,
+    }
   }
   if object_kind == "note" {
     const attrs = payload?.object_attributes ?? {}
@@ -547,7 +571,10 @@ fn __merge_state(attrs) {
   const detailed = attrs?.detailed_merge_status
   const merge_status = attrs?.merge_status
   const is_conflict = lowercase(to_string(detailed ?? "")) == "conflict"
-    || lowercase(to_string(merge_status ?? "")) == "cannot_be_merged"
+    || lowercase(
+    to_string(merge_status ?? ""),
+  )
+    == "cannot_be_merged"
   const merge_state = detailed ?? merge_status ?? "unknown"
   return {is_conflict: is_conflict, merge_state: to_string(merge_state)}
 }
@@ -697,12 +724,18 @@ fn __occurred_at(object_kind, payload, raw) {
 
 @complexity(allow)
 fn __outbound_config(args) {
-  const api_base_url = args?.api_base_url ?? harness.env.get_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
+  const api_base_url = args?.api_base_url
+    ?? harness.env.get_or(
+    "GITLAB_API_BASE_URL",
+    GITLAB_API_BASE_URL,
+  )
   const base_check = __validate_api_base_url(api_base_url)
   if is_err(base_check) {
     return base_check
   }
-  const access_token = args?.access_token ?? args?.personal_access_token ?? args?.project_access_token ?? args?.token
+  const access_token = args?.access_token ?? args?.personal_access_token
+    ?? args?.project_access_token
+    ?? args?.token
     ?? args?.bindings?.access_token
     ?? args?.secrets?.access_token
     ?? harness.env.get("GITLAB_ACCESS_TOKEN")
@@ -817,7 +850,10 @@ fn __is_disallowed_host(host_lc) {
     return true
   }
   if ends_with(host_lc, ".localhost") || ends_with(host_lc, ".local")
-    || ends_with(host_lc, ".internal") {
+    || ends_with(
+    host_lc,
+    ".internal",
+  ) {
     return true
   }
   if host_lc == "::1" || host_lc == "0:0:0:0:0:0:0:1" {
@@ -926,7 +962,8 @@ fn __gitlab_json(method, url, body, cfg) {
     if is_err(limited) {
       return limited
     }
-    if (response.status == 429 || response.status == 503) && unwrap(limited) && !retried_rate_limit {
+    if (response.status == 429 || response.status == 503) && unwrap(limited)
+      && !retried_rate_limit {
       retried_rate_limit = true
       continue
     }
@@ -940,7 +977,8 @@ fn __gitlab_json(method, url, body, cfg) {
       }
       return __err(
         code,
-        "gitlab API request failed with status " + to_string(response.status) + ": " + response.body,
+        "gitlab API request failed with status " + to_string(response.status) + ": "
+          + response.body,
       )
     }
     if trim(response.body ?? "") == "" {
@@ -983,7 +1021,11 @@ fn __maybe_wait_for_rate_limit(response) {
 
 @complexity(allow)
 fn __oauth_authorize_url(args) {
-  const api_base_url = args?.api_base_url ?? harness.env.get_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
+  const api_base_url = args?.api_base_url
+    ?? harness.env.get_or(
+    "GITLAB_API_BASE_URL",
+    GITLAB_API_BASE_URL,
+  )
   const base_check = __validate_api_base_url(api_base_url)
   if is_err(base_check) {
     return base_check
@@ -1059,15 +1101,18 @@ fn __oauth_refresh_token(args) {
 }
 
 fn __oauth_token_request(args, body) {
-  const api_base_url = args?.api_base_url ?? harness.env.get_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
+  const api_base_url = args?.api_base_url
+    ?? harness.env.get_or(
+    "GITLAB_API_BASE_URL",
+    GITLAB_API_BASE_URL,
+  )
   const base_check = __validate_api_base_url(api_base_url)
   if is_err(base_check) {
     return base_check
   }
   const host = __oauth_host(api_base_url)
   const response_result = try {
-    harness.net
-      .request(
+    harness.net.request(
       "POST",
       host + GITLAB_OAUTH_TOKEN_PATH,
       {
@@ -1084,7 +1129,8 @@ fn __oauth_token_request(args, body) {
   if response.status < 200 || response.status >= 300 {
     return __err(
       "oauth_error",
-      "gitlab oauth request failed with status " + to_string(response.status) + ": " + response.body,
+      "gitlab oauth request failed with status " + to_string(response.status) + ": "
+        + response.body,
     )
   }
   const parsed = try {
