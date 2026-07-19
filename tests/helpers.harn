@@ -37,7 +37,9 @@ pub fn assert_gitlab_interface() {
   assert_eq(payload_schema().harn_schema_name, "GitLabEventPayload", "payload schema name")
   const initialized = init({signing_secret: "test-secret"})
   assert(initialized.initialized, "init stores state")
-  const activated = activate([{id: "primary", path: "/gitlab/events", secrets: {signing_secret: "test-secret"}}])
+  const activated = activate(
+    [{id: "primary", path: "/gitlab/events", secrets: {signing_secret: "test-secret"}}],
+  )
   assert_eq(activated.bindings, 1, "activate counts bindings")
 }
 
