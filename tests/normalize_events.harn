@@ -1,10 +1,10 @@
 import { init, shutdown } from "../src/lib"
 import { fixture_raw, gitlab_normalize } from "./helpers"
 
-pipeline default() {
+pipeline default(harness: Harness) {
   const token = "test-signing-token"
-  shutdown()
-  init({signing_secret: token})
+  shutdown(harness)
+  init(harness, {signing_secret: token})
   const cases = [
     ["push", "Push Hook", "push"],
     ["tag_push", "Tag Push Hook", "tag_push"],
@@ -17,7 +17,7 @@ pipeline default() {
     ["pipeline_failed", "Pipeline Hook", "pipeline.failed"],
   ]
   for [name, header, kind] in cases {
-    const normalized = gitlab_normalize(fixture_raw(name, token, header))
+    const normalized = gitlab_normalize(harness, fixture_raw(harness, name, token, header))
     assert_eq(normalized.type, "event", name + " envelope type")
     assert_eq(normalized.event.kind, kind, name + " kind")
     assert_eq(normalized.event.payload.project.id, 101, name + " project id")
@@ -27,5 +27,5 @@ pipeline default() {
       name + " dedupe key",
     )
   }
-  shutdown()
+  shutdown(harness)
 }
