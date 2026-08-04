@@ -21,13 +21,13 @@ pub fn signed_raw(token, body, event, extra = nil) {
 }
 
 /** Read a fixture JSON body from the test fixtures directory. */
-pub fn fixture_body(harness: HarnessFs, name) {
-  return harness.read_text(harness.source_dir() + "/fixtures/webhooks/" + name + ".json")
+pub fn fixture_body(fs: HarnessFs, name) {
+  return fs.read_text(fs.source_dir() + "/fixtures/webhooks/" + name + ".json")
 }
 
 /** Build a signed raw inbound envelope from a named fixture. */
-pub fn fixture_raw(harness: HarnessFs, name, token, event, extra = nil) {
-  return signed_raw(token, fixture_body(harness, name), event, extra)
+pub fn fixture_raw(fs: HarnessFs, name, token, event, extra = nil) {
+  return signed_raw(token, fixture_body(fs, name), event, extra)
 }
 
 pub fn assert_gitlab_interface(harness: Harness) {
