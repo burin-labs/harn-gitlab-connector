@@ -8,13 +8,13 @@ import {
 } from "./helpers"
 
 @complexity(allow)
-pipeline default(harness: Harness) {
+pipeline test_normalize_smoke(harness: Harness) {
   const token = "test-signing-token"
   assert_gitlab_interface(harness)
   init(harness, {signing_secret: token})
   const mr = gitlab_normalize(
     harness,
-    fixture_raw(harness, "merge_request_opened", token, "Merge Request Hook"),
+    fixture_raw(harness.fs, "merge_request_opened", token, "Merge Request Hook"),
   )
   assert_eq(mr.type, "event", "mr envelope type")
   assert_eq(mr.event.kind, "merge_request.open", "mr kind")
@@ -23,36 +23,39 @@ pipeline default(harness: Harness) {
   assert_eq(mr.event.payload.resource.iid, 42, "mr iid")
   assert_eq(mr.event.payload.actor.username, "ada", "mr actor")
   assert(mr.event.dedupe_key != "" && mr.event.dedupe_key != nil, "mr dedupe key populated")
-  const push = gitlab_normalize(harness, fixture_raw(harness, "push", token, "Push Hook"))
+  const push = gitlab_normalize(harness, fixture_raw(harness.fs, "push", token, "Push Hook"))
   assert_eq(push.event.kind, "push", "push kind")
   assert_eq(
     push.event.payload.resource.after,
     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "push after",
   )
-  const tag = gitlab_normalize(harness, fixture_raw(harness, "tag_push", token, "Tag Push Hook"))
+  const tag = gitlab_normalize(harness, fixture_raw(harness.fs, "tag_push", token, "Tag Push Hook"))
   assert_eq(tag.event.kind, "tag_push", "tag push kind")
-  const note_mr = gitlab_normalize(harness, fixture_raw(harness, "note_mr", token, "Note Hook"))
+  const note_mr = gitlab_normalize(harness, fixture_raw(harness.fs, "note_mr", token, "Note Hook"))
   assert_eq(note_mr.event.kind, "note.create", "note on MR kind")
   assert_eq(note_mr.event.payload.resource.noteable_type, "MergeRequest", "note noteable type")
   const note_issue = gitlab_normalize(
     harness,
-    fixture_raw(harness, "note_issue", token, "Note Hook"),
+    fixture_raw(harness.fs, "note_issue", token, "Note Hook"),
   )
   assert_eq(note_issue.event.payload.resource.noteable_type, "Issue", "note on issue noteable type")
-  const issue = gitlab_normalize(harness, fixture_raw(harness, "issue_opened", token, "Issue Hook"))
+  const issue = gitlab_normalize(
+    harness,
+    fixture_raw(harness.fs, "issue_opened", token, "Issue Hook"),
+  )
   assert_eq(issue.event.kind, "issue.open", "issue kind")
   const pipeline_ok = gitlab_normalize(
     harness,
-    fixture_raw(harness, "pipeline_success", token, "Pipeline Hook"),
+    fixture_raw(harness.fs, "pipeline_success", token, "Pipeline Hook"),
   )
   assert_eq(pipeline_ok.event.kind, "pipeline.success", "pipeline success kind")
   const pipeline_bad = gitlab_normalize(
     harness,
-    fixture_raw(harness, "pipeline_failed", token, "Pipeline Hook"),
+    fixture_raw(harness.fs, "pipeline_failed", token, "Pipeline Hook"),
   )
   assert_eq(pipeline_bad.event.kind, "pipeline.failed", "pipeline failed kind")
-  const body = fixture_body(harness, "merge_request_opened")
+  const body = fixture_body(harness.fs, "merge_request_opened")
   const wrong_token = gitlab_normalize(
     harness,
     {body_text: body, headers: gitlab_headers("wrong-token", "Merge Request Hook")},
@@ -94,7 +97,7 @@ pipeline default(harness: Harness) {
   )
   assert_eq(invalid_json.type, "reject", "invalid json rejects")
   assert_eq(invalid_json.reject.status, 400, "invalid json 400")
-  const body_str = fixture_body(harness, "merge_request_opened")
+  const body_str = fixture_body(harness.fs, "merge_request_opened")
   const unsupported_body = replace(body_str, "\"merge_request\"", "\"workflow_run\"")
   const unsupported = gitlab_normalize(
     harness,

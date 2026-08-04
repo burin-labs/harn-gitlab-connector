@@ -1,7 +1,7 @@
 import { init, shutdown } from "../src/lib"
 import { fixture_raw, gitlab_normalize } from "./helpers"
 
-pipeline default(harness: Harness) {
+pipeline test_normalize_events(harness: Harness) {
   const token = "test-signing-token"
   shutdown(harness)
   init(harness, {signing_secret: token})
@@ -17,7 +17,7 @@ pipeline default(harness: Harness) {
     ["pipeline_failed", "Pipeline Hook", "pipeline.failed"],
   ]
   for [name, header, kind] in cases {
-    const normalized = gitlab_normalize(harness, fixture_raw(harness, name, token, header))
+    const normalized = gitlab_normalize(harness, fixture_raw(harness.fs, name, token, header))
     assert_eq(normalized.type, "event", name + " envelope type")
     assert_eq(normalized.event.kind, kind, name + " kind")
     assert_eq(normalized.event.payload.project.id, 101, name + " project id")
