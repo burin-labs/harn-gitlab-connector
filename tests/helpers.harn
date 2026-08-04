@@ -21,27 +21,27 @@ pub fn signed_raw(token, body, event, extra = nil) {
 }
 
 /** Read a fixture JSON body from the test fixtures directory. */
-pub fn fixture_body(harness: Harness, name) {
-  return harness.fs.read_text(harness.fs.source_dir() + "/fixtures/webhooks/" + name + ".json")
+pub fn fixture_body(harness: HarnessFs, name) {
+  return harness.read_text(harness.source_dir() + "/fixtures/webhooks/" + name + ".json")
 }
 
 /** Build a signed raw inbound envelope from a named fixture. */
-pub fn fixture_raw(harness: Harness, name, token, event, extra = nil) {
+pub fn fixture_raw(harness: HarnessFs, name, token, event, extra = nil) {
   return signed_raw(token, fixture_body(harness, name), event, extra)
 }
 
 pub fn assert_gitlab_interface(harness: Harness) {
   shutdown(harness)
-  assert_eq(provider_id(), "gitlab", "provider id")
-  assert_eq(kinds()[0], "webhook", "webhook kind")
-  assert_eq(payload_schema().harn_schema_name, "GitLabEventPayload", "payload schema name")
+  expect_eq(provider_id(), "gitlab", "provider id")
+  expect_eq(kinds()[0], "webhook", "webhook kind")
+  expect_eq(payload_schema().harn_schema_name, "GitLabEventPayload", "payload schema name")
   const initialized = init(harness, {signing_secret: "test-secret"})
-  assert(initialized.initialized, "init stores state")
+  expect(initialized.initialized, "init stores state")
   const activated = activate(
     harness,
     [{id: "primary", path: "/gitlab/events", secrets: {signing_secret: "test-secret"}}],
   )
-  assert_eq(activated.bindings, 1, "activate counts bindings")
+  expect_eq(activated.bindings, 1, "activate counts bindings")
 }
 
 pub fn gitlab_call(harness: Harness, method, args) {
@@ -50,4 +50,21 @@ pub fn gitlab_call(harness: Harness, method, args) {
 
 pub fn gitlab_normalize(harness: Harness, raw) {
   return normalize_inbound(harness, raw)
+}
+
+/**
+ * Require that a smoke-test condition holds. Helper `fn`s are not test
+ * pipelines, so `assert` does not belong here (HARN-LNT-025).
+ */
+fn expect(condition, message = "expectation failed") {
+  require condition, message
+}
+
+/** Require that two smoke-test values are equal, reporting both on failure. */
+fn expect_eq(actual, expected, message = "values differ") {
+  require actual == expected,
+    message + ": expected " + to_string(expected) + ", got "
+    + to_string(
+    actual,
+  )
 }
