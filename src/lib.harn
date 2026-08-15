@@ -28,6 +28,19 @@ const GITLAB_OUTBOUND_METHODS = [
   "oauth.refresh_token",
 ]
 
+// OAuth methods mint and rotate credentials, so they stay out of the product
+// method inventory and reach callers through `harn connect` instead.
+const GITLAB_SETUP_METHODS = ["oauth.authorize_url", "oauth.exchange_code", "oauth.refresh_token"]
+
+const GITLAB_MUTATING_METHODS = [
+  "notes.create_merge_request_note",
+  "notes.create_issue_note",
+  "merge_requests.update",
+  "merge_requests.approve",
+  "commit_status.set",
+  "graphql",
+]
+
 /** Return this connector's Harn provider id. */
 pub fn provider_id() {
   return GITLAB_PROVIDER_ID
@@ -36,6 +49,17 @@ pub fn provider_id() {
 /** Return the trigger kinds supported by this connector. */
 pub fn kinds() {
   return ["webhook"]
+}
+
+/** Describe the outbound product methods and which ones mutate GitLab state. */
+pub fn methods() {
+  let out = []
+  for name in GITLAB_OUTBOUND_METHODS {
+    if !contains(GITLAB_SETUP_METHODS, name) {
+      out = out + [{name: name, requires_approval: contains(GITLAB_MUTATING_METHODS, name)}]
+    }
+  }
+  return out
 }
 
 /** Return the canonical normalized GitLab event payload schema. */
