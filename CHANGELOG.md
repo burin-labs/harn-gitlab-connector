@@ -7,6 +7,10 @@ this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0
 
 ### Added
 
+- `credential_environment` binds `gitlab/access-token` to the
+  `GITLAB_ACCESS_TOKEN` environment variable, so a host that resolves
+  connector credentials from the process environment can find the
+  outbound GitLab token instead of reporting it missing.
 - Connector contract v2 with product-facing service metadata: the
   manifest now declares the eight outbound GitLab operations
   (`merge_requests.list_changes`, `repository_files.get`,

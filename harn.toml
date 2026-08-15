@@ -97,6 +97,9 @@ auth_type = "oauth2"
 flow = "oauth2"
 required_scopes = ["api"]
 required_secrets = ["gitlab/access-token", "gitlab/webhook-token"]
+credential_environment = [
+  { secret = "gitlab/access-token", environment_names = ["GITLAB_ACCESS_TOKEN"] },
+]
 setup_command = ["harn", "connect", "gitlab"]
 validation_command = ["harn", "connect", "status", "--connector", "gitlab", "--json"]
 
