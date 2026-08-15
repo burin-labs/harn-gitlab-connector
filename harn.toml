@@ -13,6 +13,85 @@ default = "src/lib.harn"
 id = "gitlab"
 connector = { harn = "src/lib.harn" }
 
+[providers.service]
+name = "GitLab"
+description = "Reviews GitLab merge requests and reports build status back to them."
+
+[[providers.service.operations]]
+id = "merge_requests.list_changes"
+capability = "merge_requests.read"
+purpose = "Read the changed files in one GitLab merge request."
+effect = "read"
+environments = ["live"]
+evidence = ["citation", "current_provider_state"]
+redaction = ["response_body", "error_body"]
+
+[[providers.service.operations]]
+id = "repository_files.get"
+capability = "repository.files.read"
+purpose = "Read one file from a GitLab repository at a given ref."
+effect = "read"
+environments = ["live"]
+evidence = ["citation", "current_provider_state"]
+redaction = ["response_body", "error_body"]
+
+[[providers.service.operations]]
+id = "notes.create_merge_request_note"
+capability = "merge_requests.notes.write"
+purpose = "Post the exact merge request comment reviewed by the user."
+effect = "consequential"
+environments = ["live"]
+evidence = ["user_confirmation"]
+redaction = ["request_body", "response_body", "error_body"]
+
+[[providers.service.operations]]
+id = "notes.create_issue_note"
+capability = "issues.notes.write"
+purpose = "Post the exact issue comment reviewed by the user."
+effect = "consequential"
+environments = ["live"]
+evidence = ["user_confirmation"]
+redaction = ["request_body", "response_body", "error_body"]
+
+[[providers.service.operations]]
+id = "merge_requests.update"
+capability = "merge_requests.write"
+purpose = "Apply the reviewed changes to one GitLab merge request."
+effect = "consequential"
+environments = ["live"]
+evidence = ["user_confirmation", "current_provider_state"]
+reconciliation = "supported"
+redaction = ["request_body", "response_body", "error_body"]
+
+[[providers.service.operations]]
+id = "merge_requests.approve"
+capability = "merge_requests.approve"
+purpose = "Record the user's approval on one GitLab merge request."
+effect = "consequential"
+environments = ["live"]
+evidence = ["user_confirmation", "current_provider_state"]
+reconciliation = "supported"
+redaction = ["request_body", "response_body", "error_body"]
+
+[[providers.service.operations]]
+id = "commit_status.set"
+capability = "commit_status.write"
+purpose = "Publish the reviewed build status for one commit."
+effect = "consequential"
+environments = ["live"]
+evidence = ["user_confirmation", "current_provider_state"]
+reconciliation = "supported"
+redaction = ["request_body", "response_body", "error_body"]
+
+[[providers.service.operations]]
+id = "graphql"
+capability = "graphql.request"
+purpose = "Run the reviewed GraphQL document against the GitLab API."
+effect = "consequential"
+environments = ["live"]
+evidence = ["user_confirmation", "current_provider_state"]
+redaction = ["request_body", "response_body", "error_body"]
+
 [providers.setup]
 auth_type = "oauth2"
 flow = "oauth2"
@@ -38,6 +117,9 @@ revoked_credentials = "Replace gitlab/access-token with an active OAuth, persona
 missing_scopes = "Grant the api scope or narrower scopes required by the configured GitLab workflows."
 inaccessible_resource = "Confirm the token can access the target GitLab host, namespace, project, or group."
 transient_provider_outage = "Retry after the GitLab API and webhook endpoints are healthy."
+
+[connector_contract]
+version = 2
 
 # Harn package dependencies live here. No sibling SDK dependency for v0.
 [dependencies]

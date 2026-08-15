@@ -5,6 +5,20 @@ this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0
 
 ## [Unreleased]
 
+### Added
+
+- Connector contract v2 with product-facing service metadata: the
+  manifest now declares the eight outbound GitLab operations
+  (`merge_requests.list_changes`, `repository_files.get`,
+  `notes.create_merge_request_note`, `notes.create_issue_note`,
+  `merge_requests.update`, `merge_requests.approve`,
+  `commit_status.set`, `graphql`) with their capability, purpose,
+  effect, evidence, and redaction semantics.
+- `methods()` export describing the outbound product methods and which
+  ones mutate GitLab state. OAuth methods stay out of the inventory
+  because they mint and rotate credentials and are reached through
+  `harn connect`.
+
 ## [0.1.0]
 
 ### Added
