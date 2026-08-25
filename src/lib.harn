@@ -290,9 +290,7 @@ pub fn call(harness: Harness, method, args = {}) {
       __gitlab_api_url(
         cfg.api_base_url,
         "/projects/" + __project_ref(args) + "/repository/files/"
-          + url_encode(
-          to_string(args.path ?? ""),
-        )
+          + url_encode(to_string(args.path ?? ""))
           + __ref_query(args),
       ),
       nil,
@@ -310,12 +308,7 @@ pub fn call(harness: Harness, method, args = {}) {
 
 fn __state(runtime: HarnessRuntime) {
   return runtime.store_get(GITLAB_STATE_KEY)
-    ?? {
-    initialized: false,
-    active: false,
-    bindings: {},
-    ctx: {},
-  }
+    ?? {initialized: false, active: false, bindings: {}, ctx: {}}
 }
 
 fn __set_state(runtime: HarnessRuntime, state) {
@@ -383,8 +376,7 @@ fn __signing_secret(harness: {secrets: HarnessSecrets, runtime: HarnessRuntime},
   if binding_id != nil {
     const binding = bindings.get(binding_id)
     const binding_secret = binding?.signing_secret ?? binding?.secrets?.signing_secret
-      ?? binding
-      ?.config?.signing_secret
+      ?? binding?.config?.signing_secret
     if binding_secret != nil && trim(to_string(binding_secret)) != "" {
       return to_string(binding_secret)
     }
@@ -415,8 +407,7 @@ fn __signing_secret_id(runtime: HarnessRuntime, raw) {
   if binding_id != nil {
     const binding = bindings.get(binding_id)
     const bid = binding?.signing_secret_id ?? binding?.secrets?.signing_secret_id
-      ?? binding?.config
-      ?.secret_ids?.signing_secret
+      ?? binding?.config?.secret_ids?.signing_secret
     if bid != nil && trim(to_string(bid)) != "" {
       return to_string(bid)
     }
@@ -617,10 +608,8 @@ fn __merge_state(attrs) {
   const detailed = attrs?.detailed_merge_status
   const merge_status = attrs?.merge_status
   const is_conflict = lowercase(to_string(detailed ?? "")) == "conflict"
-    || lowercase(
-    to_string(merge_status ?? ""),
-  )
-    == "cannot_be_merged"
+    || lowercase(to_string(merge_status ?? ""))
+      == "cannot_be_merged"
   const merge_state = detailed ?? merge_status ?? "unknown"
   return {is_conflict: is_conflict, merge_state: to_string(merge_state)}
 }
@@ -893,10 +882,7 @@ fn __is_disallowed_host(host_lc) {
     return true
   }
   if ends_with(host_lc, ".localhost") || ends_with(host_lc, ".local")
-    || ends_with(
-    host_lc,
-    ".internal",
-  ) {
+    || ends_with(host_lc, ".internal") {
     return true
   }
   if host_lc == "::1" || host_lc == "0:0:0:0:0:0:0:1" {
@@ -1089,9 +1075,9 @@ fn __oauth_authorize_url(env: HarnessEnv, args) {
   if args?.code_challenge != nil && trim(to_string(args.code_challenge)) != "" {
     parts = parts
       + [
-      "code_challenge=" + url_encode(to_string(args.code_challenge)),
-      "code_challenge_method=" + url_encode(to_string(args?.code_challenge_method ?? "S256")),
-    ]
+        "code_challenge=" + url_encode(to_string(args.code_challenge)),
+        "code_challenge_method=" + url_encode(to_string(args?.code_challenge_method ?? "S256")),
+      ]
   }
   return {authorize_url: host + GITLAB_OAUTH_AUTHORIZE_PATH + "?" + join(parts, "&")}
 }
@@ -1142,10 +1128,7 @@ fn __oauth_refresh_token(harness: {env: HarnessEnv, net: HarnessNet}, args) {
 
 fn __oauth_token_request(harness: {env: HarnessEnv, net: HarnessNet}, args, body) {
   const api_base_url = args?.api_base_url
-    ?? harness.env.get_or(
-    "GITLAB_API_BASE_URL",
-    GITLAB_API_BASE_URL,
-  )
+    ?? harness.env.get_or("GITLAB_API_BASE_URL", GITLAB_API_BASE_URL)
   const base_check = __validate_api_base_url(api_base_url)
   if is_err(base_check) {
     return base_check
