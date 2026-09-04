@@ -5,7 +5,7 @@ import {
   fixture_raw,
   gitlab_headers,
   gitlab_normalize,
-} from "./helpers"
+} from "../testdata/helpers"
 
 @complexity(allow)
 pipeline test_normalize_smoke(harness: Harness) {

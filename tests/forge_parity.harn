@@ -1,5 +1,5 @@
 import { init, shutdown } from "../src/lib"
-import { fixture_raw, gitlab_normalize } from "./helpers"
+import { fixture_raw, gitlab_normalize } from "../testdata/helpers"
 
 pipeline test_forge_parity(harness: Harness) {
   const token = "test-signing-token"
