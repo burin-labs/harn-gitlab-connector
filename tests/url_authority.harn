@@ -1,0 +1,19 @@
+import { call } from "../src/lib"
+
+pipeline test_url_authority(harness: Harness) {
+  harness.net.egress_policy({allow: [], default: "deny"})
+  for authority in ["user@localhost", "2130706433", "0x7f000001", "[::1]"] {
+    const result = call(
+      harness,
+      "repository_files.get",
+      {
+        api_base_url: "https://" + authority + "/api",
+        access_token: "test-token",
+        project_id: 1,
+        path: "README.md",
+      },
+    )
+    assert(is_err(result))
+    assert_eq(unwrap_err(result).code, "invalid_api_base_url", authority)
+  }
+}

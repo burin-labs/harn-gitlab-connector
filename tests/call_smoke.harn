@@ -1,5 +1,28 @@
 import { call } from "../src/lib"
 
+pipeline test_unsafe_write_is_not_retried(harness: Harness) {
+  harness.testing.http_mock_clear()
+  const base = "https://gitlab-api.test/api/v4"
+  harness.testing.http_mock(
+    "POST",
+    base + "/projects/101/issues/17/notes",
+    {
+      responses: [
+        {status: 429, headers: {"ratelimit-remaining": "0"}, body: "limited"},
+        {status: 201, body: "{\"id\":502}"},
+      ],
+    },
+  )
+  const result = call(
+    harness,
+    "notes.create_issue_note",
+    {api_base_url: base, access_token: "test-token", project_id: 101, issue_iid: 17, body: "once"},
+  )
+  assert_eq(is_err(result), true)
+  assert_eq(unwrap_err(result).code, "rate_limited")
+  assert_eq(len(harness.testing.http_mock_calls()), 1)
+}
+
 @complexity(allow)
 pipeline test_call_smoke(harness: Harness) {
   harness.net.egress_policy({allow: ["gitlab-api.test"], default: "deny"})

@@ -1,6 +1,11 @@
+import { connector_http_json } from "std/connectors/http"
+import { connector_lifecycle } from "std/connectors/shared"
+
 const GITLAB_PROVIDER_ID = "gitlab"
 
 const GITLAB_STATE_KEY = "harn-gitlab-connector.state"
+
+const lifecycle = connector_lifecycle(GITLAB_PROVIDER_ID, GITLAB_STATE_KEY)
 
 const GITLAB_API_BASE_URL = "https://gitlab.com/api/v4"
 
@@ -103,39 +108,22 @@ pub fn payload_schema() {
 
 /** Initialize connector state with orchestrator context. */
 pub fn init(harness: Harness, ctx: any = nil) {
-  const next = __state(harness.runtime) + {initialized: true, ctx: ctx ?? {}}
-  __set_state(harness.runtime, next)
-  return next
+  return lifecycle.init(harness.runtime, ctx)
 }
 
 /** Activate webhook bindings and reject duplicate configured paths. */
 pub fn activate(harness: Harness, bindings: any = []) {
-  let by_id = {}
-  let seen_paths = {}
-  for binding in bindings ?? [] {
-    const binding_id = binding?.binding_id ?? binding?.id
-      ?? ("binding-" + to_string(len(by_id.keys())))
-    const path = binding?.path ?? binding?.match?.path
-    if path != nil && path != "" {
-      if seen_paths.get(path) {
-        return __err(
-          "activation",
-          "gitlab connector path `" + path + "` is configured by multiple bindings",
-        )
-      }
-      seen_paths[path] = true
-    }
-    by_id[binding_id] = binding + {binding_id: binding_id}
+  const result = lifecycle.activate(harness.runtime, bindings)
+  return if is_err(result) {
+    result
+  } else {
+    result + {kind: "webhook"}
   }
-  const next = __state(harness.runtime) + {bindings: by_id, active: true}
-  __set_state(harness.runtime, next)
-  return {provider: GITLAB_PROVIDER_ID, kind: "webhook", bindings: len(by_id.keys())}
 }
 
 /** Clear connector lifecycle state. */
 pub fn shutdown(harness: Harness) {
-  harness.runtime.store_delete(GITLAB_STATE_KEY)
-  return {provider: GITLAB_PROVIDER_ID, active: false}
+  return lifecycle.shutdown(harness.runtime)
 }
 
 @complexity(allow)
@@ -307,13 +295,7 @@ pub fn call(harness: Harness, method: any, args: any = {}) {
 }
 
 fn __state(runtime: HarnessRuntime) {
-  return runtime.store_get(GITLAB_STATE_KEY)
-    ?? {initialized: false, active: false, bindings: {}, ctx: {}}
-}
-
-fn __set_state(runtime: HarnessRuntime, state: any) {
-  runtime.store_set(GITLAB_STATE_KEY, state)
-  return state
+  return lifecycle.state(runtime)
 }
 
 fn __err(code: any, message: any) {
@@ -823,14 +805,13 @@ fn __validate_api_base_url(api_base_url: any) {
   if !starts_with(lowercase(url), "https://") {
     return __err("invalid_api_base_url", "api_base_url must use https:// scheme")
   }
-  const after_scheme = url[8:len(url)]
-  const slash_idx = __index_of(after_scheme, "/")
-  const host_port = if slash_idx >= 0 {
-    after_scheme[0:slash_idx]
-  } else {
-    after_scheme
+  const parsed = try {
+    url_parse(url)
   }
-  const host = __strip_port(host_port)
+  if is_err(parsed) {
+    return __err("invalid_api_base_url", "api_base_url is not a valid URL")
+  }
+  const host = replace(replace(to_string(unwrap(parsed).host ?? ""), "[", ""), "]", "")
   if host == "" {
     return __err("invalid_api_base_url", "api_base_url is missing a host")
   }
@@ -843,37 +824,6 @@ fn __validate_api_base_url(api_base_url: any) {
     )
   }
   return Ok(true)
-}
-
-fn __strip_port(host_port: any) {
-  if starts_with(host_port, "[") {
-    const close = __index_of(host_port, "]")
-    if close >= 0 {
-      return host_port[1:close]
-    }
-    return host_port
-  }
-  const colon = __index_of(host_port, ":")
-  if colon >= 0 {
-    return host_port[0:colon]
-  }
-  return host_port
-}
-
-fn __index_of(text: any, needle: any) {
-  const n = len(text)
-  const m = len(needle)
-  if m == 0 {
-    return 0
-  }
-  let i = 0
-  while i + m <= n {
-    if text[i:i + m] == needle {
-      return i
-    }
-    i = i + 1
-  }
-  return -1
 }
 
 @complexity(allow)
@@ -895,7 +845,7 @@ fn __is_disallowed_host(host_lc: any) {
   }
   if starts_with(host_lc, "172.") {
     const rest = host_lc[4:len(host_lc)]
-    const dot = __index_of(rest, ".")
+    const dot = rest.index_of(".") ?? -1
     if dot > 0 {
       const octet_str = rest[0:dot]
       const parsed = try {
@@ -978,80 +928,40 @@ fn __gitlab_json(
 ) {
   let options = {
     headers: {Accept: "application/json", Authorization: "Bearer " + cfg.access_token},
-    retry: {max: 0, backoff_ms: 0},
+    retry: {max_attempts: 2, base_ms: 0, cap_ms: 60000, retry_on: [429, 503]},
+    quota: {
+      remaining_header: "ratelimit-remaining",
+      reset_header: "ratelimit-reset",
+      reset_is_epoch: true,
+    },
   }
   if body != nil {
     options["body"] = json_stringify(body)
     options.headers["Content-Type"] = "application/json"
   }
-  let retried_rate_limit = false
-  while true {
-    const response_result = try {
-      harness.net.request(method, url, options)
+  const response = connector_http_json(harness.clock, harness.net, method, url, options)
+  if !response.ok {
+    const code = {
+      auth: "unauthorized",
+      permission: "unauthorized",
+      rate_limit: "rate_limited",
+      overloaded: "rate_limited",
+      invalid_json: "invalid_response",
     }
-    if is_err(response_result) {
-      return __err("transport", to_string(unwrap_err(response_result)))
-    }
-    const response = unwrap(response_result)
-    const limited = __maybe_wait_for_rate_limit(harness.clock, response)
-    if is_err(limited) {
-      return limited
-    }
-    if (response.status == 429 || response.status == 503) && unwrap(limited)
-      && !retried_rate_limit {
-      retried_rate_limit = true
-      continue
-    }
-    if response.status < 200 || response.status >= 300 {
-      const code = if response.status == 429 || response.status == 503 {
-        "rate_limited"
-      } else if response.status == 401 || response.status == 403 {
-        "unauthorized"
-      } else {
-        "transport"
-      }
-      return __err(
-        code,
-        "gitlab API request failed with status " + to_string(response.status) + ": "
-          + response.body,
-      )
-    }
-    if trim(response.body ?? "") == "" {
-      return {status: response.status, headers: response.headers, body: ""}
-    }
-    const parsed = try {
-      json_parse(response.body)
-    }
-    if is_err(parsed) {
-      return __err("invalid_response", "GitLab API returned invalid JSON")
-    }
-    return unwrap(parsed)
+      .get(response.error.category)
+      ?? "transport"
+    return __err(
+      code,
+      response.error.message
+        ?? ("gitlab API request failed: " + to_string(response.status ?? "") + ": "
+          + to_string(response.error.body ?? response.error.category)),
+    )
   }
-}
-
-fn __maybe_wait_for_rate_limit(clock: HarnessClock, response: any) {
-  const remaining = __header(response.headers ?? {}, "ratelimit-remaining")
-  if remaining == nil || trim(to_string(remaining)) != "0" {
-    return Ok(false)
+  return if trim(response.body) == "" {
+    {status: response.status, headers: response.headers, body: ""}
+  } else {
+    response.json
   }
-  const reset = __header(response.headers ?? {}, "ratelimit-reset")
-  if reset == nil || trim(to_string(reset)) == "" {
-    return Ok(true)
-  }
-  const parsed_reset = try {
-    to_int(reset)
-  }
-  if is_err(parsed_reset) {
-    return Ok(true)
-  }
-  const wait_seconds = unwrap(parsed_reset) - to_int(clock.timestamp())
-  if wait_seconds > 60 {
-    return __err("rate_limited", "gitlab API rate limit reset is more than 60 seconds away")
-  }
-  if wait_seconds > 0 {
-    clock.sleep_ms(wait_seconds * 1000)
-  }
-  return Ok(true)
 }
 
 @complexity(allow)
