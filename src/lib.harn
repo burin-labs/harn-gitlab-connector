@@ -153,11 +153,7 @@ pub fn normalize_inbound(harness: Harness, raw: any) {
     return __reject(413, "payload_too_large", "gitlab webhook body exceeds 1 MiB cap")
   }
   const headers = raw?.headers ?? {}
-  const verified = __verify_gitlab_token(
-    {secrets: harness.secrets, runtime: harness.runtime},
-    raw,
-    headers,
-  )
+  const verified = __verify_gitlab_token(pick(harness, ["secrets", "runtime"]), raw, headers)
   if is_err(verified) {
     return __reject_err(unwrap_err(verified))
   }
@@ -197,10 +193,10 @@ pub fn call(harness: Harness, method: any, args: any = {}) {
     return __oauth_authorize_url(harness.env, args ?? {})
   }
   if method == "oauth.exchange_code" {
-    return __oauth_exchange_code({env: harness.env, net: harness.net}, args ?? {})
+    return __oauth_exchange_code(pick(harness, ["env", "net"]), args ?? {})
   }
   if method == "oauth.refresh_token" {
-    return __oauth_refresh_token({env: harness.env, net: harness.net}, args ?? {})
+    return __oauth_refresh_token(pick(harness, ["env", "net"]), args ?? {})
   }
   const config = __outbound_config(harness.env, args ?? {})
   if is_err(config) {
@@ -209,7 +205,7 @@ pub fn call(harness: Harness, method: any, args: any = {}) {
   const cfg = unwrap(config)
   if method == "notes.create_merge_request_note" {
     return __gitlab_json(
-      {clock: harness.clock, net: harness.net},
+      pick(harness, ["clock", "net"]),
       "POST",
       __gitlab_api_url(
         cfg.api_base_url,
@@ -222,7 +218,7 @@ pub fn call(harness: Harness, method: any, args: any = {}) {
   }
   if method == "notes.create_issue_note" {
     return __gitlab_json(
-      {clock: harness.clock, net: harness.net},
+      pick(harness, ["clock", "net"]),
       "POST",
       __gitlab_api_url(
         cfg.api_base_url,
@@ -234,7 +230,7 @@ pub fn call(harness: Harness, method: any, args: any = {}) {
   }
   if method == "merge_requests.update" {
     return __gitlab_json(
-      {clock: harness.clock, net: harness.net},
+      pick(harness, ["clock", "net"]),
       "PUT",
       __gitlab_api_url(
         cfg.api_base_url,
@@ -246,7 +242,7 @@ pub fn call(harness: Harness, method: any, args: any = {}) {
   }
   if method == "merge_requests.list_changes" {
     return __gitlab_json(
-      {clock: harness.clock, net: harness.net},
+      pick(harness, ["clock", "net"]),
       "GET",
       __gitlab_api_url(
         cfg.api_base_url,
@@ -260,7 +256,7 @@ pub fn call(harness: Harness, method: any, args: any = {}) {
   }
   if method == "merge_requests.approve" {
     return __gitlab_json(
-      {clock: harness.clock, net: harness.net},
+      pick(harness, ["clock", "net"]),
       "POST",
       __gitlab_api_url(
         cfg.api_base_url,
@@ -273,7 +269,7 @@ pub fn call(harness: Harness, method: any, args: any = {}) {
   }
   if method == "commit_status.set" {
     return __gitlab_json(
-      {clock: harness.clock, net: harness.net},
+      pick(harness, ["clock", "net"]),
       "POST",
       __gitlab_api_url(
         cfg.api_base_url,
@@ -285,7 +281,7 @@ pub fn call(harness: Harness, method: any, args: any = {}) {
   }
   if method == "repository_files.get" {
     return __gitlab_json(
-      {clock: harness.clock, net: harness.net},
+      pick(harness, ["clock", "net"]),
       "GET",
       __gitlab_api_url(
         cfg.api_base_url,
@@ -298,7 +294,7 @@ pub fn call(harness: Harness, method: any, args: any = {}) {
     )
   }
   return __gitlab_json(
-    {clock: harness.clock, net: harness.net},
+    pick(harness, ["clock", "net"]),
     "POST",
     __graphql_url(cfg.api_base_url),
     {query: args.query, variables: args.variables ?? {}},
@@ -433,7 +429,7 @@ fn __verify_gitlab_token(
   raw: any,
   headers: any,
 ) {
-  const secret = __signing_secret({secrets: harness.secrets, runtime: harness.runtime}, raw)
+  const secret = __signing_secret(pick(harness, ["secrets", "runtime"]), raw)
   const provided = __header(headers, "x-gitlab-token")
   if secret == nil || trim(to_string(secret)) == "" {
     if __binding_allows_unsigned(harness.runtime, raw) {
@@ -1111,7 +1107,7 @@ fn __oauth_exchange_code(harness: {env: HarnessEnv, net: HarnessNet}, args: any)
   if args?.code_verifier != nil && trim(to_string(args.code_verifier)) != "" {
     body["code_verifier"] = to_string(args.code_verifier)
   }
-  return __oauth_token_request({env: harness.env, net: harness.net}, args, body)
+  return __oauth_token_request(pick(harness, ["env", "net"]), args, body)
 }
 
 fn __oauth_refresh_token(harness: {env: HarnessEnv, net: HarnessNet}, args: any) {
@@ -1129,7 +1125,7 @@ fn __oauth_refresh_token(harness: {env: HarnessEnv, net: HarnessNet}, args: any)
   if args?.client_secret != nil && trim(to_string(args.client_secret)) != "" {
     body["client_secret"] = to_string(args.client_secret)
   }
-  return __oauth_token_request({env: harness.env, net: harness.net}, args, body)
+  return __oauth_token_request(pick(harness, ["env", "net"]), args, body)
 }
 
 fn __oauth_token_request(harness: {env: HarnessEnv, net: HarnessNet}, args: any, body: any) {
