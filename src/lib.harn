@@ -1,3 +1,5 @@
+import { connector_http_request } from "std/connectors/http"
+
 const GITLAB_PROVIDER_ID = "gitlab"
 
 const GITLAB_STATE_KEY = "harn-gitlab-connector.state"
@@ -974,80 +976,45 @@ fn __gitlab_json(
 ) {
   let options = {
     headers: {Accept: "application/json", Authorization: "Bearer " + cfg.access_token},
-    retry: {max: 0, backoff_ms: 0},
+    retry_policy: {max_attempts: 2, base_ms: 0, cap_ms: 60000, retry_on: [429, 503]},
+    quota: {
+      remaining_header: "RateLimit-Remaining",
+      reset_header: "RateLimit-Reset",
+      reset_is_epoch: true,
+    },
   }
   if body != nil {
     options["body"] = json_stringify(body)
     options.headers["Content-Type"] = "application/json"
   }
-  let retried_rate_limit = false
-  while true {
-    const response_result = try {
-      harness.net.request(method, url, options)
+  const response = connector_http_request(harness.clock, harness.net, method, url, options)
+  if !(response.ok ?? false) {
+    const status = response.status ?? response.error?.status
+    const code = if response.error?.category == "rate_limit" || status == 429 || status == 503 {
+      "rate_limited"
+    } else if status == 401 || status == 403 {
+      "unauthorized"
+    } else {
+      "transport"
     }
-    if is_err(response_result) {
-      return __err("transport", to_string(unwrap_err(response_result)))
+    const message = if status == nil {
+      to_string(response.error?.message ?? response.error?.category ?? "GitLab API request failed")
+    } else {
+      "gitlab API request failed with status " + to_string(status) + ": "
+        + to_string(response.body ?? "")
     }
-    const response = unwrap(response_result)
-    const limited = __maybe_wait_for_rate_limit(harness.clock, response)
-    if is_err(limited) {
-      return limited
-    }
-    if (response.status == 429 || response.status == 503) && unwrap(limited)
-      && !retried_rate_limit {
-      retried_rate_limit = true
-      continue
-    }
-    if response.status < 200 || response.status >= 300 {
-      const code = if response.status == 429 || response.status == 503 {
-        "rate_limited"
-      } else if response.status == 401 || response.status == 403 {
-        "unauthorized"
-      } else {
-        "transport"
-      }
-      return __err(
-        code,
-        "gitlab API request failed with status " + to_string(response.status) + ": "
-          + response.body,
-      )
-    }
-    if trim(response.body ?? "") == "" {
-      return {status: response.status, headers: response.headers, body: ""}
-    }
-    const parsed = try {
-      json_parse(response.body)
-    }
-    if is_err(parsed) {
-      return __err("invalid_response", "GitLab API returned invalid JSON")
-    }
-    return unwrap(parsed)
+    return __err(code, message)
   }
-}
-
-fn __maybe_wait_for_rate_limit(clock: HarnessClock, response: any) {
-  const remaining = __header(response.headers ?? {}, "ratelimit-remaining")
-  if remaining == nil || trim(to_string(remaining)) != "0" {
-    return Ok(false)
+  if trim(response.body ?? "") == "" {
+    return {status: response.status, headers: response.headers, body: ""}
   }
-  const reset = __header(response.headers ?? {}, "ratelimit-reset")
-  if reset == nil || trim(to_string(reset)) == "" {
-    return Ok(true)
+  const parsed = try {
+    json_parse(response.body)
   }
-  const parsed_reset = try {
-    to_int(reset)
+  if is_err(parsed) {
+    return __err("invalid_response", "GitLab API returned invalid JSON")
   }
-  if is_err(parsed_reset) {
-    return Ok(true)
-  }
-  const wait_seconds = unwrap(parsed_reset) - to_int(clock.timestamp())
-  if wait_seconds > 60 {
-    return __err("rate_limited", "gitlab API rate limit reset is more than 60 seconds away")
-  }
-  if wait_seconds > 0 {
-    clock.sleep_ms(wait_seconds * 1000)
-  }
-  return Ok(true)
+  return unwrap(parsed)
 }
 
 @complexity(allow)
