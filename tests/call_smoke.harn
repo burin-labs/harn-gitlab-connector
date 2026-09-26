@@ -113,6 +113,7 @@ pipeline test_call_smoke(harness: Harness) {
     },
   )
   assert_eq(gql.data.currentUser.username, "ada", "graphql user")
+  harness.testing.http_mock_clear()
   harness.testing.http_mock(
     "GET",
     base + "/projects/101/repository/files/README.md",
@@ -136,6 +137,52 @@ pipeline test_call_smoke(harness: Harness) {
     {api_base_url: base, access_token: token, project_id: 101, path: "README.md"},
   )
   assert_eq(retried.file_path, "README.md", "retry succeeds")
+  assert_eq(len(harness.testing.http_mock_calls()), 2, "GET retries once through shared HTTP")
+  harness.testing.http_mock_clear()
+  harness.testing.clock_set(1000000)
+  harness.testing.http_mock(
+    "GET",
+    base + "/projects/101/repository/files/README.md",
+    {
+      status: 200,
+      body: "{\"file_path\":\"README.md\"}",
+      headers: {"ratelimit-remaining": "0", "ratelimit-reset": "1002"},
+    },
+  )
+  const waited = call(
+    harness,
+    "repository_files.get",
+    {api_base_url: base, access_token: token, project_id: 101, path: "README.md"},
+  )
+  assert_eq(waited.file_path, "README.md", "successful response survives quota wait")
+  assert_eq(harness.clock.now_ms() - 1000000, 2000, "epoch quota wait is two seconds")
+  assert_eq(len(harness.testing.http_mock_calls()), 1, "successful response is not retried")
+  harness.testing.clock_reset()
+  harness.testing.http_mock_clear()
+  harness.testing.http_mock(
+    "POST",
+    base + "/projects/101/merge_requests/42/notes",
+    {
+      responses: [
+        {status: 429, body: "limited", headers: {"ratelimit-remaining": "0"}},
+        {status: 201, body: "{\"id\":999}"},
+      ],
+    },
+  )
+  const unsafe_retry = call(
+    harness,
+    "notes.create_merge_request_note",
+    {
+      api_base_url: base,
+      access_token: token,
+      project_id: 101,
+      merge_request_iid: 42,
+      body: "do not duplicate",
+    },
+  )
+  assert(is_err(unsafe_retry), "an unkeyed write is not retried")
+  assert_eq(unwrap_err(unsafe_retry).code, "rate_limited", "unkeyed write keeps error category")
+  assert_eq(len(harness.testing.http_mock_calls()), 1, "an unkeyed write is sent once")
   harness.testing.http_mock_clear()
   harness.testing.http_mock(
     "GET",
