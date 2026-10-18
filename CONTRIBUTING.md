@@ -9,7 +9,7 @@ Harn runtime and by internal automation that opens most of the pull requests
 here. An outside change would land against a contract that moves underneath it
 without notice, so pull requests from outside Burin Labs are closed unread.
 
-No release tag is published yet, so there is no stable surface to contribute against.
+Published package tags define the stable consumer surface.
 
 ## Where to send a GitLab request or bug instead
 

@@ -5,6 +5,15 @@ this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-18
+
+### Added
+
+- Read-only discovery of projects, merge requests, issues, pipelines, and pipeline
+  jobs, plus individual pipeline reads. Single-page calls encode filters and
+  selectors, reject invalid selectors before provider reads, and preserve the
+  shared authentication and error handling.
+
 ### Added
 
 - `credential_environment` binds `gitlab/access-token` to the
