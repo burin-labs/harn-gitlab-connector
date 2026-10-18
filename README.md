@@ -6,16 +6,15 @@ tagged `NormalizeResult` envelope, and dispatches outbound REST/GraphQL
 calls with optional OAuth2 helpers.
 
 This is a first-party **inbound + outbound** connector package implementing
-Harn Connector Contract v1. It is compatible with GitLab.com (SaaS), GitLab
+Harn Connector Contract v2. It is compatible with GitLab.com (SaaS), GitLab
 Self-Managed, and GitLab Dedicated (17.x+).
 
 ## Install
 
-No release tag is published yet. Use the `main` branch for package-manager
-smoke tests:
+Install the released package:
 
 ```sh
-harn add github.com/burin-labs/harn-gitlab-connector@main
+harn add harn-gitlab-connector --git https://github.com/burin-labs/harn-gitlab-connector --tag v0.2.0
 ```
 
 Use a path checkout for local multi-repo development:
@@ -26,6 +25,30 @@ harn-gitlab-connector = { path = "../harn-gitlab-connector" }
 ```
 
 ## Usage
+
+### Discover projects and build failures
+
+Call the exported `call(harness, method, args)` function with an outbound token.
+These methods are read-only and return one GitLab response page. Use `page` and
+`per_page` (1 through 100) to request subsequent pages; an empty page is distinct
+from a provider error. They do not claim to return a complete census.
+
+| Method | Required selectors | Filters |
+| --- | --- | --- |
+| `projects.list` | None | `membership`, `owned`, `archived`, `simple`, `visibility`, `search`, `order_by`, `sort` |
+| `merge_requests.list` | Project | `state`, `scope`, `search`, `source_branch`, `target_branch`, `labels`, `order_by`, `sort` |
+| `issues.list` | Project | `state`, `scope`, `search`, `labels`, `order_by`, `sort` |
+| `pipelines.list` | Project | `status`, `ref`, `sha`, `source`, `username`, `order_by`, `sort` |
+| `pipelines.get` | Project and `pipeline_id` | None |
+| `jobs.list` | Project and `pipeline_id` | `scope` (string or list of strings), `include_retried` |
+
+Project selectors accept a positive integer `project_id` or a nonempty
+`project_path`, such as `team/repository`. Pipeline IDs must be positive integers.
+Paths and filter values are URL-encoded; connection options and credentials
+never become query parameters. Existing authentication, rate limits, and provider
+errors apply to these reads. See GitLab's [merge request](https://docs.gitlab.com/api/merge_requests/),
+[issue](https://docs.gitlab.com/api/issues/), [project](https://docs.gitlab.com/api/projects/),
+[pipeline](https://docs.gitlab.com/api/pipelines/), and [job](https://docs.gitlab.com/api/jobs/) API references.
 
 ### Webhook trigger (MR-opened responder)
 

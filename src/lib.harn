@@ -16,6 +16,71 @@ const MAX_BODY_BYTES = 1048576
 
 const GITLAB_SUPPORTED_EVENTS = ["push", "tag_push", "merge_request", "note", "issue", "pipeline"]
 
+type DiscoveryRead = {
+  name: string,
+  project: bool,
+  pipeline: bool,
+  suffix: string,
+  query: list<string>,
+}
+
+const GITLAB_DISCOVERY_READS: list<DiscoveryRead> = [
+  {
+    name: "merge_requests.list",
+    project: true,
+    pipeline: false,
+    suffix: "/merge_requests",
+    query: [
+      "state",
+      "scope",
+      "search",
+      "source_branch",
+      "target_branch",
+      "labels",
+      "order_by",
+      "sort",
+    ],
+  },
+  {
+    name: "issues.list",
+    project: true,
+    pipeline: false,
+    suffix: "/issues",
+    query: ["state", "scope", "search", "labels", "order_by", "sort"],
+  },
+  {
+    name: "projects.list",
+    project: false,
+    pipeline: false,
+    suffix: "",
+    query: [
+      "membership",
+      "owned",
+      "archived",
+      "simple",
+      "visibility",
+      "search",
+      "order_by",
+      "sort",
+    ],
+  },
+  {
+    name: "pipelines.list",
+    project: true,
+    pipeline: false,
+    suffix: "/pipelines",
+    query: ["status", "ref", "sha", "source", "username", "order_by", "sort"],
+  },
+  {name: "pipelines.get", project: true, pipeline: true, suffix: "", query: []},
+  {
+    name: "jobs.list",
+    project: true,
+    pipeline: true,
+    suffix: "/jobs",
+    query: ["scope", "include_retried"],
+  },
+]
+
 const GITLAB_OUTBOUND_METHODS = [
   "notes.create_merge_request_note",
   "notes.create_issue_note",
@@ -60,6 +125,9 @@ pub fn methods() {
     if !contains(GITLAB_SETUP_METHODS, name) {
       out = out + [{name: name, requires_approval: contains(GITLAB_MUTATING_METHODS, name)}]
     }
+  }
+  for route in GITLAB_DISCOVERY_READS {
+    out = out + [{name: route.name, requires_approval: false}]
   }
   return out
 }
@@ -185,7 +253,10 @@ pub fn normalize_inbound(harness: Harness, raw: any) {
 @complexity(allow)
 /** Dispatch a supported GitLab REST / GraphQL / OAuth2 method. */
 pub fn call(harness: Harness, method: any, args: any = {}) {
-  if !contains(GITLAB_OUTBOUND_METHODS, method) {
+  const reads = GITLAB_DISCOVERY_READS.filter(
+    fn(route: DiscoveryRead) -> bool { return route.name == method },
+  )
+  if !contains(GITLAB_OUTBOUND_METHODS, method) && len(reads) == 0 {
     return __err(
       "method_not_found",
       "gitlab connector does not implement outbound method `" + method + "`",
@@ -205,6 +276,19 @@ pub fn call(harness: Harness, method: any, args: any = {}) {
     return config
   }
   const cfg = unwrap(config)
+  for route in reads {
+    const path = __discovery_path(route, args ?? {})
+    if is_err(path) {
+      return path
+    }
+    return __gitlab_json(
+      pick(harness, ["clock", "net"]),
+      "GET",
+      __gitlab_api_url(cfg.api_base_url, unwrap(path)),
+      nil,
+      cfg,
+    )
+  }
   if method == "notes.create_merge_request_note" {
     return __gitlab_json(
       pick(harness, ["clock", "net"]),
@@ -943,6 +1027,72 @@ fn __project_ref(args: any) {
     return url_encode(to_string(args.project_id))
   }
   return url_encode(to_string(args?.project_path ?? ""))
+}
+
+fn __discovery_path(route: DiscoveryRead, args: any) -> any {
+  let path = "/projects"
+  if route.project {
+    const id = args?.project_id
+    const project_path = args?.project_path
+    if id != nil {
+      if type_of(id) != "int" || id <= 0 {
+        return __err("invalid_args", "project_id must be a positive integer")
+      }
+    } else if type_of(project_path) != "string" || trim(project_path) == "" {
+      return __err("invalid_args", "project_id or a nonempty project_path is required")
+    }
+    path = "${path}/${__project_ref(args)}"
+  }
+  if route.pipeline {
+    if type_of(args?.pipeline_id) != "int" || args.pipeline_id <= 0 {
+      return __err("invalid_args", "pipeline_id must be a positive integer")
+    }
+    path = "${path}/pipelines/${args.pipeline_id}"
+  }
+  const query = __discovery_query(route, args)
+  if is_err(query) {
+    return query
+  }
+  return Ok("${path}${route.suffix}${unwrap(query)}")
+}
+
+fn __discovery_query(route: DiscoveryRead, args: any) -> any {
+  let parts: list<string> = []
+  const keys = if route.name == "pipelines.get" {
+    []
+  } else {
+    ["per_page", "page"] + route.query
+  }
+  for key in keys {
+    const value = args.get(key)
+    if value == nil {
+      continue
+    }
+    if key == "per_page" || key == "page" {
+      if type_of(value) != "int" || value < 1 || (key == "per_page" && value > 100) {
+        return __err("invalid_args", "${key} must be a positive integer; per_page is at most 100")
+      }
+    }
+    if key == "scope" && route.name == "jobs.list" && type_of(value) == "list" {
+      for scope in value {
+        if type_of(scope) != "string" || trim(scope) == "" {
+          return __err("invalid_args", "job scope must contain nonempty strings")
+        }
+        parts = parts + ["scope%5B%5D=${url_encode(scope)}"]
+      }
+    } else {
+      if !contains(["string", "int", "bool"], type_of(value)) {
+        return __err("invalid_args", "${key} must be a scalar query value")
+      }
+      parts = parts + ["${key}=${url_encode(to_string(value))}"]
+    }
+  }
+  const query = if len(parts) == 0 {
+    ""
+  } else {
+    "?${join(parts, "&")}"
+  }
+  return Ok(query)
 }
 
 fn __pagination_query(args: any) {

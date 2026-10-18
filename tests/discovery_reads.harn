@@ -1,0 +1,131 @@
+import { call, methods } from "../src/lib"
+
+pipeline test_discovery_reads_reach_the_gitlab_http_adapter(harness: Harness) {
+  harness.net.egress_policy({allow: ["gitlab-api.test"], default: "deny"})
+  harness.testing.http_mock_clear()
+  const base = "https://gitlab-api.test/api/v4"
+  const cases = [
+    {
+      method: "merge_requests.list",
+      suffix:
+        "/projects/team%2Frepo/merge_requests?per_page=2&page=3&state=opened&search=fix%20%26%20test",
+      args: {
+        project_path: "team/repo",
+        per_page: 2,
+        page: 3,
+        state: "opened",
+        search: "fix & test",
+      },
+      body: [{iid: 42}],
+    },
+    {
+      method: "issues.list",
+      suffix: "/projects/101/issues?state=opened&labels=bug%2Curgent",
+      args: {project_id: 101, state: "opened", labels: "bug,urgent"},
+      body: [{iid: 17}],
+    },
+    {
+      method: "projects.list",
+      suffix: "/projects?membership=true&search=team%2Frepo",
+      args: {membership: true, search: "team/repo"},
+      body: [{id: 101}],
+    },
+    {
+      method: "pipelines.list",
+      suffix: "/projects/101/pipelines?status=failed&ref=feature%2Fa",
+      args: {project_id: 101, status: "failed", ref: "feature/a"},
+      body: [{id: 5, status: "failed"}],
+    },
+    {
+      method: "pipelines.get",
+      suffix: "/projects/101/pipelines/5",
+      args: {project_id: 101, pipeline_id: 5},
+      body: {id: 5, status: "failed"},
+    },
+    {
+      method: "jobs.list",
+      suffix:
+        "/projects/101/pipelines/5/jobs?scope%5B%5D=failed&scope%5B%5D=pending&include_retried=false",
+      args: {project_id: 101, pipeline_id: 5, scope: ["failed", "pending"], include_retried: false},
+      body: [{id: 8, status: "failed"}],
+    },
+  ]
+  for row in cases {
+    harness.testing.http_mock(
+      "GET",
+      "${base}${row.suffix}",
+      {status: 200, body: json_stringify(row.body)},
+    )
+    const result = call(
+      harness,
+      row.method,
+      row.args + {api_base_url: base, access_token: "fixture-token"},
+    )
+    assert_eq(result, row.body, "${row.method} decodes its actual HTTP response")
+  }
+  const requests = harness.testing.http_mock_calls()
+  assert_eq(len(requests), 6, "every read reached the HTTP adapter exactly once")
+  for request in requests {
+    assert_eq(request.method, "GET")
+    assert_eq(
+      request.headers.authorization,
+      "[redacted]",
+      "authorization stays in the redacted header channel",
+    )
+    assert_eq(request.body, nil, "read request has no mutation body")
+    assert(!contains(request.url, "fixture-token"), "credentials never enter query parameters")
+  }
+  const inventory = methods()
+  for row in cases {
+    const matches = inventory.filter(fn(item) { return item.name == row.method })
+    assert_eq(len(matches), 1, "each discovery method is declared exactly once")
+    assert_eq(matches[0].requires_approval, false, "discovery never needs mutation approval")
+  }
+}
+
+pipeline test_discovery_reads_refuse_invalid_selectors_before_network(harness: Harness) {
+  harness.testing.http_mock_clear()
+  const cases = [
+    {method: "merge_requests.list", args: {}},
+    {method: "issues.list", args: {project_path: " "}},
+    {method: "pipelines.list", args: {project_id: 0}},
+    {method: "pipelines.get", args: {project_id: 101}},
+    {method: "jobs.list", args: {project_id: 101, pipeline_id: "5/jobs?scope=success"}},
+    {method: "projects.list", args: {per_page: 101}},
+    {method: "projects.list", args: {page: 0}},
+    {method: "jobs.list", args: {project_id: 101, pipeline_id: 5, scope: ["failed", 7]}},
+  ]
+  for row in cases {
+    const result = call(harness, row.method, row.args + {access_token: "fixture-token"})
+    assert(is_err(result), "invalid discovery request refuses")
+    assert_eq(unwrap_err(result).code, "invalid_args")
+  }
+  assert_eq(
+    len(harness.testing.http_mock_calls()),
+    0,
+    "invalid selection performs no provider read",
+  )
+}
+
+pipeline test_discovery_reads_preserve_auth_failure_and_measured_empty(harness: Harness) {
+  harness.net.egress_policy({allow: ["gitlab-api.test"], default: "deny"})
+  harness.testing.http_mock_clear()
+  const base = "https://gitlab-api.test/api/v4"
+  harness.testing.http_mock("GET", "${base}/projects", {status: 200, body: "[]"})
+  assert_eq(call(harness, "projects.list", {api_base_url: base, access_token: "fixture-token"}), [])
+  assert_eq(len(harness.testing.http_mock_calls()), 1, "empty is a measured successful response")
+  harness.testing.http_mock_clear()
+  harness.testing.http_mock(
+    "GET",
+    "${base}/projects/101/pipelines",
+    {status: 403, body: "forbidden"},
+  )
+  const denied = call(
+    harness,
+    "pipelines.list",
+    {api_base_url: base, access_token: "fixture-token", project_id: 101},
+  )
+  assert(is_err(denied), "provider refusal is never an empty successful census")
+  assert_eq(unwrap_err(denied).code, "unauthorized")
+  assert_eq(len(harness.testing.http_mock_calls()), 1, "authorization failure is not retried")
+}

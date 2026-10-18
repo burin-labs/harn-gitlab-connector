@@ -1,6 +1,6 @@
 [package]
 name = "harn-gitlab-connector"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pure-Harn GitLab connector: webhooks, OAuth2 + PAT auth, REST/GraphQL dispatch."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/burin-labs/harn-gitlab-connector"
@@ -16,6 +16,60 @@ connector = { harn = "src/lib.harn" }
 [providers.service]
 name = "GitLab"
 description = "Reviews GitLab merge requests and reports build status back to them."
+
+[[providers.service.operations]]
+id = "merge_requests.list"
+capability = "merge_requests.read"
+purpose = "Discover merge requests in a GitLab project."
+effect = "read"
+environments = ["live"]
+evidence = ["citation", "current_provider_state"]
+redaction = ["response_body", "error_body"]
+
+[[providers.service.operations]]
+id = "issues.list"
+capability = "issues.read"
+purpose = "Discover issues in a GitLab project."
+effect = "read"
+environments = ["live"]
+evidence = ["citation", "current_provider_state"]
+redaction = ["response_body", "error_body"]
+
+[[providers.service.operations]]
+id = "projects.list"
+capability = "projects.read"
+purpose = "Discover GitLab projects visible to the current credential."
+effect = "read"
+environments = ["live"]
+evidence = ["citation", "current_provider_state"]
+redaction = ["response_body", "error_body"]
+
+[[providers.service.operations]]
+id = "pipelines.list"
+capability = "pipelines.read"
+purpose = "Discover pipelines in a GitLab project."
+effect = "read"
+environments = ["live"]
+evidence = ["citation", "current_provider_state"]
+redaction = ["response_body", "error_body"]
+
+[[providers.service.operations]]
+id = "pipelines.get"
+capability = "pipelines.read"
+purpose = "Read the current state of one GitLab pipeline."
+effect = "read"
+environments = ["live"]
+evidence = ["citation", "current_provider_state"]
+redaction = ["response_body", "error_body"]
+
+[[providers.service.operations]]
+id = "jobs.list"
+capability = "pipelines.jobs.read"
+purpose = "Discover jobs in one GitLab pipeline."
+effect = "read"
+environments = ["live"]
+evidence = ["citation", "current_provider_state"]
+redaction = ["response_body", "error_body"]
 
 [[providers.service.operations]]
 id = "merge_requests.list_changes"
