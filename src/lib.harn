@@ -1,8 +1,18 @@
 import { connector_http_request } from "std/connectors/http"
+import { connector_lifecycle } from "std/connectors/shared"
 
 const GITLAB_PROVIDER_ID = "gitlab"
 
 const GITLAB_STATE_KEY = "harn-gitlab-connector.state"
+
+const lifecycle = connector_lifecycle(GITLAB_PROVIDER_ID, GITLAB_STATE_KEY)
+
+/** Saved bindings and caller context returned by initialization. */
+pub type LifecycleState = {initialized: bool, active: bool, bindings: dict<string, dict>, ctx: any}
+
+/** Webhook binding count on success, or an activation error. */
+pub type Activation = {provider: string, kind: string, bindings: int} \
+  | Result<nil, {code: string, message: string}>
 
 const GITLAB_API_BASE_URL = "https://gitlab.com/api/v4"
 
@@ -172,40 +182,22 @@ pub fn payload_schema() {
 }
 
 /** Initialize connector state with orchestrator context. */
-pub fn init(harness: Harness, ctx: any = nil) {
-  const next = __state(harness.runtime) + {initialized: true, ctx: ctx ?? {}}
-  __set_state(harness.runtime, next)
-  return next
+pub fn init(harness: Harness, ctx: any = nil) -> LifecycleState {
+  return lifecycle.init(harness.runtime, ctx)
 }
 
 /** Activate webhook bindings and reject duplicate configured paths. */
-pub fn activate(harness: Harness, bindings: any = []) {
-  let by_id = {}
-  let seen_paths = {}
-  for binding in bindings ?? [] {
-    const binding_id = binding?.binding_id ?? binding?.id
-      ?? "binding-" + to_string(len(by_id.keys()))
-    const path = binding?.path ?? binding?.match?.path
-    if path != nil && path != "" {
-      if seen_paths.get(path) {
-        return __err(
-          "activation",
-          "gitlab connector path `" + path + "` is configured by multiple bindings",
-        )
-      }
-      seen_paths[path] = true
-    }
-    by_id[binding_id] = binding + {binding_id: binding_id}
+pub fn activate(harness: Harness, bindings: any = []) -> Activation {
+  const activated = lifecycle.activate(harness.runtime, bindings)
+  if is_err(activated) {
+    return activated
   }
-  const next = __state(harness.runtime) + {bindings: by_id, active: true}
-  __set_state(harness.runtime, next)
-  return {provider: GITLAB_PROVIDER_ID, kind: "webhook", bindings: len(by_id.keys())}
+  return activated + {kind: "webhook"}
 }
 
 /** Clear connector lifecycle state. */
-pub fn shutdown(harness: Harness) {
-  harness.runtime.store_delete(GITLAB_STATE_KEY)
-  return {provider: GITLAB_PROVIDER_ID, active: false}
+pub fn shutdown(harness: Harness) -> {provider: string, active: bool} {
+  return lifecycle.shutdown(harness.runtime)
 }
 
 @complexity(allow)
@@ -388,14 +380,8 @@ pub fn call(harness: Harness, method: any, args: any = {}) {
   )
 }
 
-fn __state(runtime: HarnessRuntime) {
-  return runtime.store_get(GITLAB_STATE_KEY)
-    ?? {initialized: false, active: false, bindings: {}, ctx: {}}
-}
-
-fn __set_state(runtime: HarnessRuntime, state: any) {
-  runtime.store_set(GITLAB_STATE_KEY, state)
-  return state
+fn __state(runtime: HarnessRuntime) -> LifecycleState {
+  return lifecycle.state(runtime)
 }
 
 fn __err(code: any, message: any) {
@@ -449,11 +435,11 @@ fn __event_kind_from_header(headers: any) {
 
 fn __signing_secret(harness: {secrets: HarnessSecrets, runtime: HarnessRuntime}, raw: any) {
   const state = __state(harness.runtime)
-  const ctx_secret = state?.ctx?.signing_secret ?? state?.ctx?.secrets?.signing_secret
+  const ctx_secret = state.ctx?.signing_secret ?? state.ctx?.secrets?.signing_secret
   if ctx_secret != nil && trim(to_string(ctx_secret)) != "" {
     return to_string(ctx_secret)
   }
-  const bindings = state?.bindings ?? {}
+  const bindings = state.bindings
   const binding_id = raw?.metadata?.binding_id ?? raw?.binding_id
   if binding_id != nil {
     const binding = bindings.get(binding_id)
@@ -484,7 +470,7 @@ fn __signing_secret_id(runtime: HarnessRuntime, raw: any) {
   if id != nil && trim(to_string(id)) != "" {
     return to_string(id)
   }
-  const bindings = __state(runtime)?.bindings ?? {}
+  const bindings = __state(runtime).bindings
   const binding_id = metadata?.binding_id ?? raw?.binding_id
   if binding_id != nil {
     const binding = bindings.get(binding_id)
@@ -498,7 +484,7 @@ fn __signing_secret_id(runtime: HarnessRuntime, raw: any) {
 }
 
 fn __binding_allows_unsigned(runtime: HarnessRuntime, raw: any) {
-  const bindings = __state(runtime)?.bindings ?? {}
+  const bindings = __state(runtime).bindings
   const binding_id = raw?.metadata?.binding_id ?? raw?.binding_id
   if binding_id == nil {
     return false
