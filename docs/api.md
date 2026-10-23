@@ -8,6 +8,23 @@ Version: `0.2.0`
 
 `src/lib.harn`
 
+### type `LifecycleState`
+
+Saved bindings and caller context returned by initialization.
+
+```harn
+pub type LifecycleState = {initialized: bool, active: bool, bindings: dict<string, dict>, ctx: any}
+```
+
+### type `Activation`
+
+Webhook binding count on success, or an activation error.
+
+```harn
+pub type Activation = {provider: string, kind: string, bindings: int} \
+  | Result<nil, {code: string, message: string}>
+```
+
 ### fn `provider_id`
 
 Return this connector's Harn provider id.
@@ -49,7 +66,7 @@ pub fn payload_schema() {
 Initialize connector state with orchestrator context.
 
 ```harn
-pub fn init(harness: Harness, ctx: any = nil) {
+pub fn init(harness: Harness, ctx: any = nil) -> LifecycleState {
 }
 ```
 
@@ -58,7 +75,7 @@ pub fn init(harness: Harness, ctx: any = nil) {
 Activate webhook bindings and reject duplicate configured paths.
 
 ```harn
-pub fn activate(harness: Harness, bindings: any = []) {
+pub fn activate(harness: Harness, bindings: any = []) -> Activation {
 }
 ```
 
@@ -67,7 +84,7 @@ pub fn activate(harness: Harness, bindings: any = []) {
 Clear connector lifecycle state.
 
 ```harn
-pub fn shutdown(harness: Harness) {
+pub fn shutdown(harness: Harness) -> {provider: string, active: bool} {
 }
 ```
 
